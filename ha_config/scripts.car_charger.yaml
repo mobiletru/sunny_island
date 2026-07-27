@@ -1,0 +1,208 @@
+shutdown_car_charger:
+  alias: Shutdown car charger
+  icon: mdi:ev-station
+  description: >
+    Stop Tesla charging via Tessie (switch.x_charge → stop_charging).
+    Wakes the car if needed, sets charge current to 0, notifies Companion (Plaid).
+  mode: single
+  sequence:
+    - continue_on_error: true
+      action: button.press
+      target:
+        entity_id: button.x_wake
+    - delay:
+        seconds: 3
+    - action: switch.turn_off
+      target:
+        entity_id: switch.x_charge
+    - continue_on_error: true
+      action: number.set_value
+      target:
+        entity_id: number.x_charge_current
+      data:
+        value: 0
+    - delay:
+        seconds: 5
+    - if:
+        - condition: or
+          conditions:
+            - condition: state
+              entity_id: switch.x_charge
+              state: "on"
+            - condition: state
+              entity_id: sensor.x_charging
+              state: charging
+      then:
+        - continue_on_error: true
+          action: button.press
+          target:
+            entity_id: button.x_wake
+        - delay:
+            seconds: 2
+        - action: switch.turn_off
+          target:
+            entity_id: switch.x_charge
+        - continue_on_error: true
+          action: number.set_value
+          target:
+            entity_id: number.x_charge_current
+          data:
+            value: 0
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.car_charger
+    - action: logbook.log
+      data:
+        name: Car charger (Tessie)
+        message: >-
+          Tessie stop_charging — charge={{ states('sensor.x_charging') }},
+          switch={{ states('switch.x_charge') }},
+          amps={{ states('number.x_charge_current') }},
+          cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V,
+          SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%
+        entity_id: switch.x_charge
+    - action: script.notify_iphone
+      data:
+        title: "Car charging stopped (Tessie)"
+        message: >-
+          Pack cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V ·
+          SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}% ·
+          charge={{ states('sensor.x_charging') }}.
+
+start_car_charger:
+  alias: Start car charger
+  icon: mdi:ev-station
+  description: >
+    Start Tesla charging via Tessie (switch.x_charge → start_charging).
+    Blocked if pack lowest cell ≤ 3.2 V or SoC ≤ 15%. Wakes car, sets 18 A,
+    notifies Companion (Plaid).
+  mode: single
+  sequence:
+    - variables:
+        cell: "{{ states('sensor.battery_storage_tesla_pack_lowest_cell') | float(99) }}"
+        soc: "{{ states('sensor.battery_storage_tesla_pack_state_of_charge') | float(100) }}"
+        cell_s: "{{ states('sensor.battery_storage_tesla_pack_lowest_cell') }}"
+        soc_s: "{{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}"
+    - if:
+        - condition: template
+          value_template: >-
+            {% set bad = ['unavailable', 'unknown', 'none', ''] %}
+            {% set cell_ok = cell_s not in bad %}
+            {% set soc_ok = soc_s not in bad %}
+            {{ (cell_ok and cell <= 3.2) or (soc_ok and soc <= 15) }}
+      then:
+        - action: script.notify_iphone
+          data:
+            title: "Start charging blocked"
+            message: >-
+              Pack too low to start charging (cell {{ cell_s }} V, SoC {{ soc_s }}%).
+              Protection threshold is 3.2 V / 15% SoC.
+        - action: persistent_notification.create
+          data:
+            title: Start charging blocked
+            message: >-
+              Cell {{ cell_s }} V · SoC {{ soc_s }}% — will not start Tessie charge.
+            notification_id: car_charger_start_blocked
+        - stop: Pack below protection threshold
+    # Safe to start
+    - continue_on_error: true
+      action: button.press
+      target:
+        entity_id: button.x_wake
+    - delay:
+        seconds: 3
+    - continue_on_error: true
+      action: number.set_value
+      target:
+        entity_id: number.x_charge_current
+      data:
+        value: 18
+    - action: switch.turn_on
+      target:
+        entity_id: switch.x_charge
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.car_charger
+    - delay:
+        seconds: 5
+    - if:
+        - condition: state
+          entity_id: switch.x_charge
+          state: "off"
+      then:
+        - continue_on_error: true
+          action: button.press
+          target:
+            entity_id: button.x_wake
+        - delay:
+            seconds: 2
+        - action: switch.turn_on
+          target:
+            entity_id: switch.x_charge
+    - action: logbook.log
+      data:
+        name: Car charger (Tessie)
+        message: >-
+          Tessie start_charging — charge={{ states('sensor.x_charging') }},
+          switch={{ states('switch.x_charge') }},
+          amps={{ states('number.x_charge_current') }},
+          cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V,
+          SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%
+        entity_id: switch.x_charge
+    - action: script.notify_iphone
+      data:
+        title: "Car charging started (Tessie)"
+        message: >-
+          Pack cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V ·
+          SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}% ·
+          amps={{ states('number.x_charge_current') }} ·
+          charge={{ states('sensor.x_charging') }}.
+
+notify_iphone:
+  alias: Notify iPhone (OS top banner)
+  icon: mdi:cellphone
+  description: >
+    OS top banner via Companion notify.mobile_app_plaid (time-sensitive).
+  mode: queued
+  fields:
+    title:
+      description: Notification title
+      example: Battery alert
+      required: true
+      selector:
+        text:
+    message:
+      description: Notification body
+      example: Lowest cell is low
+      required: true
+      selector:
+        text:
+  sequence:
+    - action: persistent_notification.create
+      data:
+        title: "{{ title }}"
+        message: "{{ message }}"
+        notification_id: pack_cell_low
+    - action: notify.mobile_app_plaid
+      data:
+        title: "{{ title }}"
+        message: "{{ message }}"
+        data:
+          push:
+            sound:
+              name: default
+              critical: 1
+              volume: 1.0
+            interruption-level: time-sensitive
+          ttl: 0
+          priority: high
+          channel: alarm
+          importance: high
+          url: /lovelace-sunny-island-detail/overview
+          clickAction: /lovelace-sunny-island-detail/overview
+          tag: pack_protection
+          sticky: true
+          presentation_options:
+            - alert
+            - sound
+            - badge
