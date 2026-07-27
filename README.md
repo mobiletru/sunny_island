@@ -1,11 +1,13 @@
 # Sunny Island
 
-**One HAOS app** for the whole plant:
+**The only plant repo.** One HAOS app for everything:
 
-1. **Tesla EVTV BMS** custom integration installer (LiteCAN UDP → pack sensors)
+1. **Tesla EVTV BMS** integration installer (LiteCAN UDP → pack sensors)
 2. **Live plant dashboard** (gauges, Enphase, Tessie kWh, start/stop charge)
 
 Vanilla JS over HA WebSocket. No WebBox UI kits.
+
+> Old repos (`tesla_evtv_bms`, `sunny_island_detail`, `sma-webbox-dashboard`, etc.) are retired and point here.
 
 ## What it does on start
 
@@ -22,7 +24,7 @@ Sign convention: **− discharge · + charge**
 
 ## Install
 
-1. Place this folder at `/addons/sunny_island` (or clone the repo)
+1. Place this folder at `/addons/sunny_island` (or clone this repo)
 2. Settings → Apps → Local → **Sunny Island** → Install → Start
 3. Sidebar → **Sunny Island**
 4. If the BMS integration is new: Devices & services → Add **Tesla EVTV BMS**
@@ -39,14 +41,14 @@ Sign convention: **− discharge · + charge**
 | `envoy_prefix` | `sensor.envoy_…` | Envoy entity prefix |
 | `ha_token` | _(empty)_ | Optional long-lived token for the plant UI |
 
-## Requirements
+## Hard-delete old GitHub repos
 
-- HAOS with local add-ons
-- For live data: EVTV BMS on LiteCAN UDP, Enphase Envoy, optional Tessie
+```bash
+echo 'ghp_YOUR_TOKEN_WITH_delete_repo' > /root/.github-token
+chmod 600 /root/.github-token
+/addons/sunny_island/scripts/delete-old-repos.sh
+```
 
-## Replaces
+## License
 
-This **2.0.0** app replaces the separate apps:
-
-- `sunny_island` (UI only)
-- `tesla_evtv_bms` (integration installer only)
+MIT
