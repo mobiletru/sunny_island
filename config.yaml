@@ -1,0 +1,36 @@
+name: Sunny Island
+version: "1.0.0"
+slug: sunny_island
+description: >-
+  Live plant dashboard for HAOS — Tesla pack (EVTV BMS 2-line 12S), Enphase
+  solar/load, ring gauges, KPIs, Tessie kWh, start/stop charge. Vanilla JS over
+  HA WebSocket.
+url: https://github.com/mobiletru/sunny_island
+arch:
+  - aarch64
+  - amd64
+init: false
+boot: auto
+startup: application
+hassio_api: true
+homeassistant_api: true
+host_network: false
+ingress: true
+ingress_port: 8098
+panel_icon: mdi:solar-power-variant
+panel_title: Sunny Island
+watchdog: "http://[HOST]:[PORT:8098]/health"
+ports:
+  8098/tcp: null
+ports_description:
+  8098/tcp: Direct UI (optional; prefer Ingress sidebar)
+options:
+  pack_prefix: battery_storage_tesla_pack
+  envoy_prefix: sensor.envoy_122039004946
+  ha_token: ""
+  log_level: info
+schema:
+  pack_prefix: str
+  envoy_prefix: str
+  ha_token: password?
+  log_level: list(trace|debug|info|notice|warning|error|fatal)
