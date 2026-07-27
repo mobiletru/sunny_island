@@ -1,5 +1,8 @@
 .git
 .gitignore
 *.md
-ha_config
 dist
+__pycache__
+*.pyc
+scripts/push.sh
+scripts/github-credential.sh

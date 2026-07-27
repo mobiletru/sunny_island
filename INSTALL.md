@@ -1,21 +1,26 @@
-# Install Sunny Island (HAOS app)
+# Install Sunny Island (all-in-one)
 
-## From GitHub (local add-on)
-
-1. On the HAOS host:
+## Local add-on
 
 ```bash
 cd /addons
 git clone https://github.com/mobiletru/sunny_island.git sunny_island
+# or copy this folder to /addons/sunny_island
 ```
 
-2. In Home Assistant: **Settings → Apps → ⋮ → Check for updates** (or reload)
-3. Install **Sunny Island** from Local add-ons → **Start**
-4. Enable **Show in sidebar** if needed
-5. Open **Sunny Island** and paste a long-lived access token (or set `ha_token` in options)
+1. Settings → Apps → ⋮ → Check for updates  
+2. Install **Sunny Island** → **Start**  
+3. Enable **Show in sidebar** if needed  
+4. Open **Sunny Island** for the live plant UI  
+5. If pack sensors are missing: **Devices & services → Add integration → Tesla EVTV BMS**  
+6. Restart Home Assistant Core after the first integration install/update  
 
-## Requirements
+## After upgrading from separate apps
 
-- Custom integration **tesla_evtv_bms** (pack sensors)
-- Enphase Envoy sensors (configure `envoy_prefix`)
-- Optional: Tessie entities + `script.start_car_charger` / `script.shutdown_car_charger`
+1. Install/rebuild **Sunny Island** 2.0.0  
+2. Stop and **uninstall** the old **Tesla EVTV BMS** app (integration files stay in `/config`)  
+3. Keep using the same EVTV BMS integration config in HA  
+
+## Options
+
+See README — `auto_sync` keeps the BMS component updated from the app image.
