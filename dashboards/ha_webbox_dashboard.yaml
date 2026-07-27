@@ -1,0 +1,541 @@
+# Sunny Island + Tesla Pack + SMA WebBox
+# Entity IDs match the live tesla_evtv_bms integration (area-prefixed).
+
+title: Sunny Island
+views:
+  # ── Overview ──────────────────────────────────────────────────────────
+  - title: Overview
+    path: overview
+    icon: mdi:view-dashboard
+    type: sections
+    max_columns: 3
+    sections:
+      - type: grid
+        columns: 3
+        square: false
+        cards:
+          - type: heading
+            heading: Plant at a glance
+            heading_style: title
+            icon: mdi:solar-power-variant
+
+      - type: grid
+        columns: 3
+        square: false
+        cards:
+          - type: gauge
+            entity: sensor.battery_storage_tesla_pack_state_of_charge
+            name: Battery SoC
+            min: 0
+            max: 100
+            needle: true
+            severity:
+              red: 0
+              yellow: 25
+              green: 50
+          - type: gauge
+            entity: sensor.battery_storage_tesla_pack_power
+            name: Pack power
+            min: -100000
+            max: 100000
+            needle: true
+            severity:
+              red: -80000
+              yellow: -20000
+              green: 0
+          - type: gauge
+            entity: sensor.battery_storage_tesla_pack_webbox_power
+            name: WebBox solar
+            min: 0
+            max: 15000
+            needle: true
+            severity:
+              red: 0
+              yellow: 500
+              green: 2000
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: tile
+            entity: sensor.battery_storage_tesla_pack_battery_status
+            name: Pack status
+            icon: mdi:battery-charging
+            color: primary
+          - type: tile
+            entity: sensor.battery_storage_tesla_pack_fault_status
+            name: Faults
+            icon: mdi:shield-check
+            color: green
+          - type: tile
+            entity: sensor.battery_storage_tesla_pack_summary
+            name: Summary
+            icon: mdi:text-box-outline
+          - type: tile
+            entity: sensor.battery_storage_tesla_pack_available_energy
+            name: Available energy
+            icon: mdi:battery-70
+
+      - type: grid
+        columns: 1
+        square: false
+        cards:
+          - type: markdown
+            content: >
+              **Pack** ·
+              {{ states('sensor.battery_storage_tesla_pack_volts') }} V ·
+              {{ states('sensor.battery_storage_tesla_pack_current') }} A ·
+              {{ states('sensor.battery_storage_tesla_pack_power') }} W
+              · {{ states('sensor.battery_storage_tesla_pack_total_modules') }} modules /
+              {{ states('sensor.battery_storage_tesla_pack_active_cells') }} cells
+
+              **Solar (WebBox)** ·
+              {{ states('sensor.battery_storage_tesla_pack_webbox_power') }} W now ·
+              {{ states('sensor.battery_storage_tesla_pack_webbox_daily_yield') }} kWh today ·
+              {{ states('sensor.battery_storage_tesla_pack_webbox_total_yield') }} kWh lifetime
+
+              **Enphase** ·
+              prod {{ states('sensor.envoy_122039004946_current_power_production') }} kW ·
+              load {{ states('sensor.envoy_122039004946_current_power_consumption') }} kW ·
+              net {{ states('sensor.envoy_122039004946_current_net_power_consumption') }} kW
+
+      - type: grid
+        columns: 1
+        square: false
+        cards:
+          - type: history-graph
+            title: Pack power (12 h)
+            hours_to_show: 12
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_power
+                name: Pack
+              - entity: sensor.battery_storage_tesla_pack_webbox_power
+                name: WebBox solar
+          - type: history-graph
+            title: SoC (24 h)
+            hours_to_show: 24
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_state_of_charge
+                name: SoC
+
+  # ── Solar / WebBox ────────────────────────────────────────────────────
+  - title: Solar
+    path: solar
+    icon: mdi:solar-power
+    type: sections
+    max_columns: 2
+    sections:
+      - type: grid
+        columns: 1
+        square: false
+        cards:
+          - type: heading
+            heading: SMA Sunny WebBox
+            heading_style: title
+            icon: mdi:solar-panel-large
+
+      - type: grid
+        columns: 3
+        square: false
+        cards:
+          - type: tile
+            entity: sensor.battery_storage_tesla_pack_webbox_power
+            name: Live power
+            icon: mdi:flash
+            color: amber
+          - type: tile
+            entity: sensor.battery_storage_tesla_pack_webbox_daily_yield
+            name: Today
+            icon: mdi:calendar-today
+            color: amber
+          - type: tile
+            entity: sensor.battery_storage_tesla_pack_webbox_total_yield
+            name: Lifetime
+            icon: mdi:counter
+            color: amber
+
+      - type: grid
+        columns: 1
+        square: false
+        cards:
+          - type: history-graph
+            title: WebBox solar power
+            hours_to_show: 24
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_webbox_power
+                name: WebBox
+          - type: history-graph
+            title: Daily yield
+            hours_to_show: 168
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_webbox_daily_yield
+                name: WebBox day
+
+      - type: grid
+        columns: 1
+        square: false
+        cards:
+          - type: heading
+            heading: Enphase (site)
+            heading_style: title
+            icon: mdi:home-lightning-bolt
+          - type: entities
+            title: Production & load
+            show_header_toggle: false
+            entities:
+              - entity: sensor.envoy_122039004946_current_power_production
+                name: Production
+              - entity: sensor.envoy_122039004946_current_power_consumption
+                name: Consumption
+              - entity: sensor.envoy_122039004946_current_net_power_consumption
+                name: Net (import + / export −)
+              - entity: sensor.envoy_122039004946_energy_production_today
+                name: Produced today
+              - entity: sensor.envoy_122039004946_energy_consumption_today
+                name: Consumed today
+              - entity: sensor.envoy_122039004946_lifetime_energy_production
+                name: Lifetime production
+
+  # ── Battery ───────────────────────────────────────────────────────────
+  - title: Battery
+    path: battery
+    icon: mdi:car-battery
+    type: sections
+    max_columns: 2
+    sections:
+      - type: grid
+        columns: 1
+        square: false
+        cards:
+          - type: heading
+            heading: Tesla pack (EVTV BMS)
+            heading_style: title
+            icon: mdi:battery-high
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: gauge
+            entity: sensor.battery_storage_tesla_pack_state_of_charge
+            name: SoC
+            min: 0
+            max: 100
+            needle: true
+            severity:
+              red: 0
+              yellow: 25
+              green: 50
+          - type: gauge
+            entity: sensor.battery_storage_tesla_pack_cell_difference
+            name: Cell delta
+            min: 0
+            max: 0.2
+            needle: true
+            severity:
+              green: 0
+              yellow: 0.05
+              red: 0.1
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: entities
+            title: Electrical
+            show_header_toggle: false
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_battery_status
+                name: Status
+              - entity: sensor.battery_storage_tesla_pack_volts
+                name: Voltage
+              - entity: sensor.battery_storage_tesla_pack_current
+                name: Current
+              - entity: sensor.battery_storage_tesla_pack_power
+                name: Power
+              - entity: sensor.battery_storage_tesla_pack_charge
+                name: Charge power
+              - entity: sensor.battery_storage_tesla_pack_discharge
+                name: Discharge power
+              - entity: sensor.battery_storage_tesla_pack_power_average
+                name: Power (avg)
+          - type: entities
+            title: Capacity & time
+            show_header_toggle: false
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_state_of_charge
+                name: SoC
+              - entity: sensor.battery_storage_tesla_pack_available_energy
+                name: Available
+              - entity: sensor.battery_storage_tesla_pack_pack_ah_used
+                name: Ah used
+              - entity: sensor.battery_storage_tesla_pack_hours_to_empty
+                name: Hours to empty
+              - entity: sensor.battery_storage_tesla_pack_hours_to_full
+                name: Hours to full
+              - entity: sensor.battery_storage_tesla_pack_summary
+                name: Summary
+              - entity: sensor.battery_storage_tesla_pack_total_modules
+                name: Modules
+              - entity: sensor.battery_storage_tesla_pack_total_cells
+                name: Cells
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: entities
+            title: Cells
+            show_header_toggle: false
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_lowest_cell
+                name: Lowest
+              - entity: sensor.battery_storage_tesla_pack_highest_cell
+                name: Highest
+              - entity: sensor.battery_storage_tesla_pack_average_cell
+                name: Average
+              - entity: sensor.battery_storage_tesla_pack_cell_difference
+                name: Delta
+              - entity: sensor.battery_storage_tesla_pack_trigger_cell_voltage
+                name: Trigger cell
+              - entity: sensor.battery_storage_tesla_pack_active_cells
+                name: Active cells
+              - entity: sensor.battery_storage_tesla_pack_max_cells
+                name: Max cells
+          - type: entities
+            title: Temperature & cutoffs
+            show_header_toggle: false
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_lowest_temp
+                name: Lowest temp
+              - entity: sensor.battery_storage_tesla_pack_highest_temp
+                name: Highest temp
+              - entity: sensor.battery_storage_tesla_pack_high_voltage_cutoff
+                name: HV cutoff
+              - entity: sensor.battery_storage_tesla_pack_low_voltage_cutoff
+                name: LV cutoff
+              - entity: sensor.battery_storage_tesla_pack_freq_shift_volts
+                name: Freq-shift V
+              - entity: sensor.battery_storage_tesla_pack_tcch_amps
+                name: TCCH amps
+
+      - type: grid
+        columns: 1
+        square: false
+        cards:
+          - type: entities
+            title: Contactors & safety
+            show_header_toggle: false
+            state_color: true
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_contactor_positive
+                name: + Contactor
+              - entity: sensor.battery_storage_tesla_pack_contactor_negative
+                name: − Contactor
+              - entity: sensor.battery_storage_tesla_pack_charge_enable
+                name: Charge enable
+              - entity: sensor.battery_storage_tesla_pack_heat_enable
+                name: Heat enable
+              - entity: sensor.battery_storage_tesla_pack_power_source
+                name: Power source
+              - entity: sensor.battery_storage_tesla_pack_fault_code
+                name: Fault code
+              - entity: sensor.battery_storage_tesla_pack_fault_status
+                name: Fault status
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: sensor.battery_storage_tesla_pack_fault_status
+                state_not: No Fault
+            card:
+              type: markdown
+              content: >
+                ## ⚠️ Fault active
+
+                **{{ states('sensor.battery_storage_tesla_pack_fault_status') }}**
+                (code {{ states('sensor.battery_storage_tesla_pack_fault_code') }})
+
+      - type: grid
+        columns: 1
+        square: false
+        cards:
+          - type: history-graph
+            title: Current & voltage
+            hours_to_show: 12
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_current
+                name: Current
+              - entity: sensor.battery_storage_tesla_pack_volts
+                name: Volts
+          - type: history-graph
+            title: Cell voltages
+            hours_to_show: 12
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_lowest_cell
+                name: Low
+              - entity: sensor.battery_storage_tesla_pack_average_cell
+                name: Avg
+              - entity: sensor.battery_storage_tesla_pack_highest_cell
+                name: High
+          - type: history-graph
+            title: Temperatures
+            hours_to_show: 24
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_lowest_temp
+                name: Low
+              - entity: sensor.battery_storage_tesla_pack_highest_temp
+                name: High
+
+  # ── Energy ────────────────────────────────────────────────────────────
+  - title: Energy
+    path: energy
+    icon: mdi:chart-timeline-variant
+    type: sections
+    max_columns: 2
+    sections:
+      - type: grid
+        columns: 1
+        square: false
+        cards:
+          - type: heading
+            heading: Charge / discharge totals
+            heading_style: title
+            icon: mdi:transmission-tower
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: entities
+            title: Charge energy
+            show_header_toggle: false
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_charge_energy
+                name: Total
+              - entity: sensor.battery_storage_tesla_pack_charge_energy_hour
+                name: Hour
+              - entity: sensor.battery_storage_tesla_pack_charge_energy_day
+                name: Day
+              - entity: sensor.battery_storage_tesla_pack_charge_energy_week
+                name: Week
+              - entity: sensor.battery_storage_tesla_pack_charge_energy_month
+                name: Month
+              - entity: sensor.battery_storage_tesla_pack_charge_energy_year
+                name: Year
+          - type: entities
+            title: Discharge energy
+            show_header_toggle: false
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_discharge_energy
+                name: Total
+              - entity: sensor.battery_storage_tesla_pack_discharge_energy_hour
+                name: Hour
+              - entity: sensor.battery_storage_tesla_pack_discharge_energy_day
+                name: Day
+              - entity: sensor.battery_storage_tesla_pack_discharge_energy_week
+                name: Week
+              - entity: sensor.battery_storage_tesla_pack_discharge_energy_month
+                name: Month
+              - entity: sensor.battery_storage_tesla_pack_discharge_energy_year
+                name: Year
+
+      - type: grid
+        columns: 1
+        square: false
+        cards:
+          - type: history-graph
+            title: Day energy (charge vs discharge)
+            hours_to_show: 48
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_charge_energy_day
+                name: Charge day
+              - entity: sensor.battery_storage_tesla_pack_discharge_energy_day
+                name: Discharge day
+          - type: entities
+            title: Solar totals
+            show_header_toggle: false
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_webbox_daily_yield
+                name: WebBox today
+              - entity: sensor.battery_storage_tesla_pack_webbox_total_yield
+                name: WebBox lifetime
+              - entity: sensor.envoy_122039004946_energy_production_today
+                name: Enphase today
+              - entity: sensor.envoy_122039004946_energy_production_last_seven_days
+                name: Enphase 7 days
+              - entity: sensor.envoy_122039004946_lifetime_energy_production
+                name: Enphase lifetime
+
+  # ── Raw CAN ───────────────────────────────────────────────────────────
+  - title: Raw CAN
+    path: raw-can
+    icon: mdi:chip
+    type: sections
+    max_columns: 2
+    sections:
+      - type: grid
+        columns: 1
+        square: false
+        cards:
+          - type: markdown
+            content: >
+              Frames without a fully named decode. `_raw` is the 8-byte hex
+              payload; `_u16` is bytes 0–1 as little-endian (graphable only —
+              not a validated engineering unit). Live source: EVTV CAN-DUE on
+              UDP **6550**.
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: entities
+            title: Module-rate frames (0x653, 0x655–0x65a)
+            show_header_toggle: false
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_can_653_raw
+              - entity: sensor.battery_storage_tesla_pack_can_653_u16
+              - entity: sensor.battery_storage_tesla_pack_can_655_raw
+              - entity: sensor.battery_storage_tesla_pack_can_655_u16
+              - entity: sensor.battery_storage_tesla_pack_can_656_raw
+              - entity: sensor.battery_storage_tesla_pack_can_656_u16
+              - entity: sensor.battery_storage_tesla_pack_can_657_raw
+              - entity: sensor.battery_storage_tesla_pack_can_657_u16
+              - entity: sensor.battery_storage_tesla_pack_can_658_raw
+              - entity: sensor.battery_storage_tesla_pack_can_658_u16
+              - entity: sensor.battery_storage_tesla_pack_can_659_raw
+              - entity: sensor.battery_storage_tesla_pack_can_659_u16
+              - entity: sensor.battery_storage_tesla_pack_can_65a_raw
+              - entity: sensor.battery_storage_tesla_pack_can_65a_u16
+          - type: entities
+            title: Event frames (0x680–0x687)
+            show_header_toggle: false
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_can_680_raw
+              - entity: sensor.battery_storage_tesla_pack_can_680_u16
+              - entity: sensor.battery_storage_tesla_pack_can_681_raw
+              - entity: sensor.battery_storage_tesla_pack_can_681_u16
+              - entity: sensor.battery_storage_tesla_pack_can_682_raw
+              - entity: sensor.battery_storage_tesla_pack_can_682_u16
+              - entity: sensor.battery_storage_tesla_pack_can_684_raw
+              - entity: sensor.battery_storage_tesla_pack_can_684_u16
+              - entity: sensor.battery_storage_tesla_pack_can_685_raw
+              - entity: sensor.battery_storage_tesla_pack_can_685_u16
+              - entity: sensor.battery_storage_tesla_pack_can_686_raw
+              - entity: sensor.battery_storage_tesla_pack_can_686_u16
+              - entity: sensor.battery_storage_tesla_pack_can_687_raw
+              - entity: sensor.battery_storage_tesla_pack_can_687_u16
+
+      - type: grid
+        columns: 1
+        square: false
+        cards:
+          - type: history-graph
+            title: Module-frame u16 trends (1 h)
+            hours_to_show: 1
+            entities:
+              - entity: sensor.battery_storage_tesla_pack_can_655_u16
+              - entity: sensor.battery_storage_tesla_pack_can_656_u16
+              - entity: sensor.battery_storage_tesla_pack_can_657_u16
+              - entity: sensor.battery_storage_tesla_pack_can_658_u16
+              - entity: sensor.battery_storage_tesla_pack_can_659_u16

@@ -1,0 +1,513 @@
+# Silent stop (used by pack protection so notifies are latched separately)
+shutdown_car_charger_silent:
+  alias: Shutdown car charger (silent)
+  icon: mdi:ev-station
+  description: Tessie stop only — no phone notify (automation latches notify).
+  mode: single
+  sequence:
+    - continue_on_error: true
+      action: button.press
+      target:
+        entity_id: button.x_wake
+    - delay:
+        seconds: 2
+    - continue_on_error: true
+      action: switch.turn_off
+      target:
+        entity_id: switch.x_charge
+    - continue_on_error: true
+      action: number.set_value
+      target:
+        entity_id: number.x_charge_current
+      data:
+        value: 0
+    - delay:
+        seconds: 3
+    - if:
+        - condition: or
+          conditions:
+            - condition: state
+              entity_id: switch.x_charge
+              state: "on"
+            - condition: state
+              entity_id: sensor.x_charging
+              state: charging
+            - condition: state
+              entity_id: sensor.x_charging
+              state: starting
+      then:
+        - continue_on_error: true
+          action: button.press
+          target:
+            entity_id: button.x_wake
+        - delay:
+            seconds: 2
+        - continue_on_error: true
+          action: switch.turn_off
+          target:
+            entity_id: switch.x_charge
+        - continue_on_error: true
+          action: number.set_value
+          target:
+            entity_id: number.x_charge_current
+          data:
+            value: 0
+    - continue_on_error: true
+      action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.car_charger
+    - continue_on_error: true
+      action: logbook.log
+      data:
+        name: Car charger (Tessie)
+        message: >-
+          Silent stop — charge={{ states('sensor.x_charging') }},
+          cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V
+        entity_id: switch.x_charge
+
+shutdown_car_charger:
+  alias: Shutdown car charger
+  icon: mdi:ev-station
+  description: >
+    Stop Tesla charging via Tessie + one Companion notify (manual / UI button).
+  mode: single
+  sequence:
+    - continue_on_error: true
+      action: script.shutdown_car_charger_silent
+    - continue_on_error: true
+      action: script.notify_iphone
+      data:
+        title: "Car charging stopped (Tessie)"
+        message: >-
+          Pack cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V ·
+          SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}% ·
+          charge={{ states('sensor.x_charging') }}.
+
+start_car_charger:
+  alias: Start car charger
+  icon: mdi:ev-station
+  description: >
+    Start Tesla charging via Tessie (switch.x_charge → start_charging).
+    Blocked if pack lowest cell ≤ 3.2 V or SoC ≤ 15%. Wakes car, sets 18 A,
+    notifies Companion (Plaid).
+  mode: single
+  sequence:
+    - variables:
+        cell_s: "{{ states('sensor.battery_storage_tesla_pack_lowest_cell') }}"
+        soc_s: "{{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}"
+    - if:
+        - condition: template
+          value_template: >-
+            {% set bad = ['unavailable', 'unknown', 'none', ''] %}
+            {% set cell_s = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
+            {% set soc_s = states('sensor.battery_storage_tesla_pack_state_of_charge') %}
+            {% if cell_s in bad and soc_s in bad %}
+              false
+            {% else %}
+              {% set cell = cell_s|float(99) if cell_s not in bad else 99 %}
+              {% set soc = soc_s|float(100) if soc_s not in bad else 100 %}
+              {{ cell <= 3.2 or soc <= 15 }}
+            {% endif %}
+      then:
+        - continue_on_error: true
+          action: script.notify_iphone
+          data:
+            title: "Start charging blocked"
+            message: >-
+              Pack too low to start charging
+              (cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V,
+              SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%).
+              Protection threshold is 3.2 V / 15% SoC.
+        - continue_on_error: true
+          action: persistent_notification.create
+          data:
+            title: Start charging blocked
+            message: >-
+              Cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V ·
+              SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%
+              — will not start Tessie charge.
+            notification_id: car_charger_start_blocked
+        - stop: Pack below protection threshold
+    # Safe to start
+    - continue_on_error: true
+      action: button.press
+      target:
+        entity_id: button.x_wake
+    - delay:
+        seconds: 3
+    - continue_on_error: true
+      action: number.set_value
+      target:
+        entity_id: number.x_charge_current
+      data:
+        value: 18
+    - continue_on_error: true
+      action: switch.turn_on
+      target:
+        entity_id: switch.x_charge
+    - continue_on_error: true
+      action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.car_charger
+    - delay:
+        seconds: 5
+    - if:
+        - condition: state
+          entity_id: switch.x_charge
+          state: "off"
+      then:
+        - continue_on_error: true
+          action: button.press
+          target:
+            entity_id: button.x_wake
+        - delay:
+            seconds: 2
+        - continue_on_error: true
+          action: switch.turn_on
+          target:
+            entity_id: switch.x_charge
+    - continue_on_error: true
+      action: logbook.log
+      data:
+        name: Car charger (Tessie)
+        message: >-
+          Tessie start_charging — charge={{ states('sensor.x_charging') }},
+          switch={{ states('switch.x_charge') }},
+          amps={{ states('number.x_charge_current') }},
+          cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V,
+          SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%
+        entity_id: switch.x_charge
+    - continue_on_error: true
+      action: script.notify_iphone
+      data:
+        title: "Car charging started (Tessie)"
+        message: >-
+          Pack cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V ·
+          SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}% ·
+          amps={{ states('number.x_charge_current') }} ·
+          charge={{ states('sensor.x_charging') }}.
+
+notify_iphone:
+  alias: Notify iPhone (OS top banner)
+  icon: mdi:cellphone
+  description: >
+    One OS top banner via Companion (Plaid). Same tag replaces prior alert
+    so spam does not pile up on the phone.
+  mode: queued
+  max: 3
+  fields:
+    title:
+      description: Notification title
+      example: Battery alert
+      required: true
+      selector:
+        text:
+    message:
+      description: Notification body
+      example: Lowest cell is low
+      required: true
+      selector:
+        text:
+    tag:
+      description: Optional notification tag (same tag replaces prior)
+      example: pack_protection
+      required: false
+      selector:
+        text:
+    notification_id:
+      description: Optional persistent_notification id
+      example: pack_cell_low
+      required: false
+      selector:
+        text:
+  sequence:
+    - variables:
+        notify_tag: "{{ tag if tag is defined and tag else 'pack_protection' }}"
+        notify_id: "{{ notification_id if notification_id is defined and notification_id else 'pack_cell_low' }}"
+    - continue_on_error: true
+      action: persistent_notification.create
+      data:
+        title: "{{ title }}"
+        message: "{{ message }}"
+        notification_id: "{{ notify_id }}"
+    # Prefer Companion when available; never fail the script if phone is offline
+    - continue_on_error: true
+      action: notify.mobile_app_plaid
+      data:
+        title: "{{ title }}"
+        message: "{{ message }}"
+        data:
+          push:
+            sound:
+              name: default
+              critical: 1
+              volume: 1.0
+            interruption-level: time-sensitive
+          ttl: 0
+          priority: high
+          channel: alarm
+          importance: high
+          tag: "{{ notify_tag }}"
+          group: "{{ notify_tag }}"
+          url: /lovelace-sunny-island-detail/overview
+          clickAction: /lovelace-sunny-island-detail/overview
+          presentation_options:
+            - alert
+            - sound
+            - badge
+          sticky: false
+          persistent: false
+
+# ---------------------------------------------------------------------------
+# Device offline / online helpers
+# ---------------------------------------------------------------------------
+
+notify_device_offline:
+  alias: Notify device offline
+  icon: mdi:lan-disconnect
+  description: >
+    Alert when a watched plant device goes offline (BMS, WebBox, Tessie).
+    Call from automations or run check_critical_devices.
+  mode: queued
+  max: 5
+  fields:
+    device_name:
+      description: Human name of the device
+      example: Tesla BMS pack
+      required: true
+      selector:
+        text:
+    detail:
+      description: Extra detail (entity, last seen, etc.)
+      example: sensor.battery_storage_tesla_pack_volts unavailable
+      required: false
+      selector:
+        text:
+  sequence:
+    - continue_on_error: true
+      action: script.notify_iphone
+      data:
+        title: "Device offline — {{ device_name }}"
+        message: >-
+          {{ device_name }} appears offline.
+          {{ detail if detail is defined and detail else '' }}
+          Time {{ now().strftime('%Y-%m-%d %H:%M:%S') }}.
+        tag: device_offline
+        notification_id: device_offline
+    - continue_on_error: true
+      action: logbook.log
+      data:
+        name: Device offline
+        message: >-
+          {{ device_name }} offline
+          {{ ('— ' ~ detail) if detail is defined and detail else '' }}
+
+notify_device_online:
+  alias: Notify device online
+  icon: mdi:lan-connect
+  description: Recovery notice when a watched device comes back.
+  mode: queued
+  max: 5
+  fields:
+    device_name:
+      description: Human name of the device
+      example: Tesla BMS pack
+      required: true
+      selector:
+        text:
+    detail:
+      description: Optional detail
+      required: false
+      selector:
+        text:
+  sequence:
+    - continue_on_error: true
+      action: script.notify_iphone
+      data:
+        title: "Device online — {{ device_name }}"
+        message: >-
+          {{ device_name }} is back online.
+          {{ detail if detail is defined and detail else '' }}
+          Time {{ now().strftime('%Y-%m-%d %H:%M:%S') }}.
+        tag: device_offline
+        notification_id: device_offline
+    - continue_on_error: true
+      action: logbook.log
+      data:
+        name: Device online
+        message: >-
+          {{ device_name }} online
+          {{ ('— ' ~ detail) if detail is defined and detail else '' }}
+
+check_critical_devices:
+  alias: Check critical devices
+  icon: mdi:lan-check
+  description: >
+    Scan BMS pack, WebBox, and Tessie/car. Offline only after a long quiet
+    period (BMS/Tessie 15 min, WebBox 30 min) so brief blips do not alert.
+    Online notify only after data looks healthy again. Safe to run manually.
+  mode: single
+  sequence:
+    - variables:
+        # Offline grace: BMS/Tessie 15 min, WebBox 30 min (no UDP / unavailable).
+        # Online: require fresh healthy state (BMS <2 min, others <5 min).
+        bms_state: "{{ states('sensor.battery_storage_tesla_pack_volts') }}"
+        bms_age: >-
+          {% set s = states.sensor.battery_storage_tesla_pack_volts %}
+          {% if s is none %}99999{% else %}{{ (now() - s.last_updated).total_seconds() | int }}{% endif %}
+        webbox_state: "{{ states('sensor.battery_storage_tesla_pack_webbox_power') }}"
+        webbox_age: >-
+          {% set s = states.sensor.battery_storage_tesla_pack_webbox_power %}
+          {% if s is none %}99999{% else %}{{ (now() - s.last_updated).total_seconds() | int }}{% endif %}
+        tessie_state: "{{ states('sensor.x_battery_level') }}"
+        tessie_age: >-
+          {% set s = states.sensor.x_battery_level %}
+          {% if s is none %}99999{% else %}{{ (now() - s.last_updated).total_seconds() | int }}{% endif %}
+        bms_offline: >-
+          {% set s = states.sensor.battery_storage_tesla_pack_volts %}
+          {% set age = 99999 if s is none else (now() - s.last_updated).total_seconds() %}
+          {{ age >= 900 }}
+        bms_online: >-
+          {% set st = states('sensor.battery_storage_tesla_pack_volts') %}
+          {% set s = states.sensor.battery_storage_tesla_pack_volts %}
+          {% set age = 99999 if s is none else (now() - s.last_updated).total_seconds() %}
+          {{ st not in ['unavailable','unknown','none',''] and age < 120 }}
+        webbox_offline: >-
+          {% set st = states('sensor.battery_storage_tesla_pack_webbox_power') %}
+          {% set s = states.sensor.battery_storage_tesla_pack_webbox_power %}
+          {% set age = 99999 if s is none else (now() - s.last_updated).total_seconds() %}
+          {{ st in ['unavailable','unknown','none',''] and age >= 1800 }}
+        webbox_online: >-
+          {% set st = states('sensor.battery_storage_tesla_pack_webbox_power') %}
+          {% set s = states.sensor.battery_storage_tesla_pack_webbox_power %}
+          {% set age = 99999 if s is none else (now() - s.last_updated).total_seconds() %}
+          {{ st not in ['unavailable','unknown','none',''] and age < 300 }}
+        tessie_offline: >-
+          {% set bat = states('sensor.x_battery_level') %}
+          {% set sw = states('switch.x_charge') %}
+          {% set s = states.sensor.x_battery_level %}
+          {% set age = 99999 if s is none else (now() - s.last_updated).total_seconds() %}
+          {% set bad = bat in ['unavailable','unknown','none','']
+                       or sw in ['unavailable','unknown','none',''] %}
+          {{ bad and age >= 900 }}
+        tessie_online: >-
+          {% set bat = states('sensor.x_battery_level') %}
+          {% set sw = states('switch.x_charge') %}
+          {% set s = states.sensor.x_battery_level %}
+          {% set age = 99999 if s is none else (now() - s.last_updated).total_seconds() %}
+          {{ bat not in ['unavailable','unknown','none','']
+             and sw not in ['unavailable','unknown','none','']
+             and age < 300 }}    # BMS pack (UDP live data) — offline after 15 min silence
+    - if:
+        - condition: template
+          value_template: "{{ bms_offline | bool }}"
+        - condition: state
+          entity_id: input_boolean.device_offline_bms
+          state: "off"
+      then:
+        - action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.device_offline_bms
+          continue_on_error: true
+        - action: script.notify_device_offline
+          data:
+            device_name: Tesla BMS pack
+            detail: >-
+              volts={{ bms_state }}, last update {{ bms_age }}s ago
+              (offline after 15 min quiet)
+          continue_on_error: true
+    - if:
+        - condition: template
+          value_template: "{{ bms_online | bool }}"
+        - condition: state
+          entity_id: input_boolean.device_offline_bms
+          state: "on"
+      then:
+        - action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.device_offline_bms
+          continue_on_error: true
+        - action: script.notify_device_online
+          data:
+            device_name: Tesla BMS pack
+            detail: "volts={{ bms_state }} (fresh {{ bms_age }}s)"
+          continue_on_error: true
+    # SMA WebBox — offline after 30 min (often flaky; do not cry wolf)
+    - if:
+        - condition: template
+          value_template: "{{ webbox_offline | bool }}"
+        - condition: state
+          entity_id: input_boolean.device_offline_webbox
+          state: "off"
+      then:
+        - action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.device_offline_webbox
+          continue_on_error: true
+        - action: script.notify_device_offline
+          data:
+            device_name: SMA WebBox
+            detail: >-
+              webbox_power={{ webbox_state }}, quiet {{ webbox_age }}s
+              (offline after 30 min)
+          continue_on_error: true
+    - if:
+        - condition: template
+          value_template: "{{ webbox_online | bool }}"
+        - condition: state
+          entity_id: input_boolean.device_offline_webbox
+          state: "on"
+      then:
+        - action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.device_offline_webbox
+          continue_on_error: true
+        - action: script.notify_device_online
+          data:
+            device_name: SMA WebBox
+            detail: "webbox_power={{ webbox_state }}"
+          continue_on_error: true
+    # Tessie / car X — offline after 15 min
+    - if:
+        - condition: template
+          value_template: "{{ tessie_offline | bool }}"
+        - condition: state
+          entity_id: input_boolean.device_offline_tessie
+          state: "off"
+      then:
+        - action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.device_offline_tessie
+          continue_on_error: true
+        - action: script.notify_device_offline
+          data:
+            device_name: Tessie / car X
+            detail: >-
+              battery={{ tessie_state }},
+              charge_switch={{ states('switch.x_charge') }},
+              quiet {{ tessie_age }}s (offline after 15 min)
+          continue_on_error: true
+    - if:
+        - condition: template
+          value_template: "{{ tessie_online | bool }}"
+        - condition: state
+          entity_id: input_boolean.device_offline_tessie
+          state: "on"
+      then:
+        - action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.device_offline_tessie
+          continue_on_error: true
+        - action: script.notify_device_online
+          data:
+            device_name: Tessie / car X
+            detail: "battery={{ tessie_state }}%"
+          continue_on_error: true
+    - continue_on_error: true
+      action: logbook.log
+      data:
+        name: Device check
+        message: >-
+          BMS offline={{ bms_offline }} online={{ bms_online }} age={{ bms_age }}s;
+          WebBox offline={{ webbox_offline }} online={{ webbox_online }} age={{ webbox_age }}s;
+          Tessie offline={{ tessie_offline }} online={{ tessie_online }} age={{ tessie_age }}s

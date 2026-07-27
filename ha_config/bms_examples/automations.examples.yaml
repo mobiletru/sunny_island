@@ -1,0 +1,552 @@
+# ---------------------------------------------------------------------------
+# Pack protection — stop car charging at ≤ 3.2 V / SoC ≤ 15%
+# Notify latches: one warn + one trip until cells recover above reset.
+# ---------------------------------------------------------------------------
+
+# Shared template snippets (inlined — HA YAML has no macros across files)
+
+# Reset notify latches when pack is healthy again
+- id: pack_cell_notify_latch_reset
+  alias: Pack cell notify latch reset
+  description: Clears warn/trip latches when lowest cell > 3.28 V and SoC > 16%.
+  mode: single
+  max_exceeded: silent
+  triggers:
+    - trigger: numeric_state
+      entity_id: sensor.battery_storage_tesla_pack_lowest_cell
+      above: 3.28
+    - trigger: numeric_state
+      entity_id: sensor.battery_storage_tesla_pack_state_of_charge
+      above: 16
+    - trigger: state
+      entity_id:
+        - input_boolean.pack_cell_warn_sent
+        - input_boolean.pack_cell_trip_sent
+      to: "on"
+  conditions:
+    - condition: template
+      value_template: >-
+        {% set bad = ['unavailable','unknown','none',''] %}
+        {% set c = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
+        {% set s = states('sensor.battery_storage_tesla_pack_state_of_charge') %}
+        {% if c in bad or s in bad %}
+          false
+        {% else %}
+          {{ c|float(0) > 3.28 and s|float(0) > 16 }}
+        {% endif %}
+    - condition: or
+      conditions:
+        - condition: state
+          entity_id: input_boolean.pack_cell_warn_sent
+          state: "on"
+        - condition: state
+          entity_id: input_boolean.pack_cell_trip_sent
+          state: "on"
+  actions:
+    - action: input_boolean.turn_off
+      target:
+        entity_id:
+          - input_boolean.pack_cell_warn_sent
+          - input_boolean.pack_cell_trip_sent
+      continue_on_error: true
+
+# Warning once when 3.2 < cell ≤ 3.25 (does not stop charging)
+- id: pack_cell_approaching_3_25_warn
+  alias: Pack cell approaching 3.25 V — warn
+  description: One OS notify when lowest cell enters 3.20–3.25 V band; latched until reset.
+  mode: single
+  max_exceeded: silent
+  triggers:
+    # Fires when cell enters the band (not on every mV tick)
+    - trigger: numeric_state
+      entity_id: sensor.battery_storage_tesla_pack_lowest_cell
+      below: 3.25
+      above: 3.2
+    # Backup poll if already sitting in the band at restart
+    - trigger: time_pattern
+      minutes: "/5"
+      id: periodic
+    - trigger: homeassistant
+      event: start
+      id: ha_start
+  conditions:
+    - condition: state
+      entity_id: input_boolean.pack_cell_warn_sent
+      state: "off"
+    - condition: template
+      value_template: >-
+        {% set v = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
+        {% if v in ['unavailable','unknown','none',''] %}
+          false
+        {% else %}
+          {% set cell = v|float(99) %}
+          {{ cell <= 3.25 and cell > 3.2 }}
+        {% endif %}
+  actions:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.pack_cell_warn_sent
+      continue_on_error: true
+    - action: script.notify_iphone
+      data:
+        title: "Pack cell low warning"
+        message: >-
+          Lowest cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V
+          (hard stop at 3.2 V). SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%.
+          You will get one stop message if it hits 3.2 V.
+      continue_on_error: true
+
+# Hard stop charging at ≤ 3.2 V or SoC ≤ 15% — notify once per trip
+- id: pack_lowest_cell_3_2_alert_and_stop_charger
+  alias: Pack lowest cell 3.2 V — stop car charger
+  description: >
+    Stops Tessie charging when cell ≤ 3.2 V or SoC ≤ 15%. Notifies once per trip
+    (latched) until cells recover above 3.28 V.
+  mode: single
+  max_exceeded: silent
+  triggers:
+    - trigger: numeric_state
+      entity_id: sensor.battery_storage_tesla_pack_lowest_cell
+      below: 3.2
+      id: cell_low
+    - trigger: numeric_state
+      entity_id: sensor.battery_storage_tesla_pack_trigger_cell_voltage
+      below: 3.2
+      id: trigger_cell_low
+    - trigger: numeric_state
+      entity_id: sensor.battery_storage_tesla_pack_state_of_charge
+      below: 15
+      id: soc_low
+    - trigger: state
+      entity_id: switch.x_charge
+      to: "on"
+      id: charge_reenabled
+    - trigger: time_pattern
+      minutes: "/2"
+      id: periodic_check
+    - trigger: homeassistant
+      event: start
+      id: ha_start
+  conditions:
+    - condition: template
+      value_template: >-
+        {% set bad = ['unavailable','unknown','none',''] %}
+        {% set cell_s = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
+        {% set trig_s = states('sensor.battery_storage_tesla_pack_trigger_cell_voltage') %}
+        {% set soc_s = states('sensor.battery_storage_tesla_pack_state_of_charge') %}
+        {% set cell = cell_s|float(99) if cell_s not in bad else 99 %}
+        {% set trig = trig_s|float(99) if trig_s not in bad else 99 %}
+        {% set soc = soc_s|float(100) if soc_s not in bad else 100 %}
+        {{ cell <= 3.2 or trig <= 3.2 or soc <= 15 }}
+    - condition: or
+      conditions:
+        - condition: state
+          entity_id: switch.x_charge
+          state: "on"
+        - condition: state
+          entity_id: sensor.x_charging
+          state: charging
+        - condition: state
+          entity_id: sensor.x_charging
+          state: starting
+        - condition: state
+          entity_id: input_boolean.car_charger
+          state: "on"
+  actions:
+    # Give entities time after HA start before acting
+    - if:
+        - condition: template
+          value_template: "{{ trigger.id | default('') == 'ha_start' }}"
+      then:
+        - delay:
+            seconds: 45
+        - condition: template
+          value_template: >-
+            {% set bad = ['unavailable','unknown','none',''] %}
+            {% set cell_s = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
+            {% set trig_s = states('sensor.battery_storage_tesla_pack_trigger_cell_voltage') %}
+            {% set soc_s = states('sensor.battery_storage_tesla_pack_state_of_charge') %}
+            {% set cell = cell_s|float(99) if cell_s not in bad else 99 %}
+            {% set trig = trig_s|float(99) if trig_s not in bad else 99 %}
+            {% set soc = soc_s|float(100) if soc_s not in bad else 100 %}
+            {{ cell <= 3.2 or trig <= 3.2 or soc <= 15 }}
+        - condition: or
+          conditions:
+            - condition: state
+              entity_id: switch.x_charge
+              state: "on"
+            - condition: state
+              entity_id: sensor.x_charging
+              state: charging
+            - condition: state
+              entity_id: sensor.x_charging
+              state: starting
+    # Debounce so a single bad sample does not trip
+    - delay:
+        seconds: 5
+    - condition: template
+      value_template: >-
+        {% set bad = ['unavailable','unknown','none',''] %}
+        {% set cell_s = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
+        {% set trig_s = states('sensor.battery_storage_tesla_pack_trigger_cell_voltage') %}
+        {% set soc_s = states('sensor.battery_storage_tesla_pack_state_of_charge') %}
+        {% set cell = cell_s|float(99) if cell_s not in bad else 99 %}
+        {% set trig = trig_s|float(99) if trig_s not in bad else 99 %}
+        {% set soc = soc_s|float(100) if soc_s not in bad else 100 %}
+        {{ cell <= 3.2 or trig <= 3.2 or soc <= 15 }}
+    - condition: or
+      conditions:
+        - condition: state
+          entity_id: switch.x_charge
+          state: "on"
+        - condition: state
+          entity_id: sensor.x_charging
+          state: charging
+        - condition: state
+          entity_id: sensor.x_charging
+          state: starting
+    - action: script.shutdown_car_charger_silent
+      continue_on_error: true
+    - if:
+        - condition: state
+          entity_id: input_boolean.pack_cell_trip_sent
+          state: "off"
+      then:
+        - action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.pack_cell_trip_sent
+          continue_on_error: true
+        - action: script.notify_iphone
+          data:
+            title: "Battery protection — charging stopped"
+            message: >-
+              Trigger {{ trigger.id | default('unknown') }}:
+              lowest {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V,
+              trigger {{ states('sensor.battery_storage_tesla_pack_trigger_cell_voltage') }} V,
+              SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%.
+              Tessie off (≤ 3.2 V or SoC ≤ 15%). One notify until pack recovers.
+          continue_on_error: true
+    - action: logbook.log
+      data:
+        name: Pack protection
+        message: >-
+          {{ trigger.id | default('unknown') }} — cell
+          {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V /
+          SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%
+          — charging stopped
+        entity_id: sensor.battery_storage_tesla_pack_lowest_cell
+      continue_on_error: true
+
+# Keep dashboard flag in sync with Tessie
+- id: sync_car_charger_boolean_with_x_charge
+  alias: Sync car charger flag with X Charge
+  mode: queued
+  max_exceeded: silent
+  triggers:
+    - trigger: state
+      entity_id: switch.x_charge
+      to:
+        - "on"
+        - "off"
+    - trigger: homeassistant
+      event: start
+  actions:
+    - delay:
+        seconds: 2
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: switch.x_charge
+              state: "on"
+          sequence:
+            - action: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.car_charger
+              continue_on_error: true
+        - conditions:
+            - condition: state
+              entity_id: switch.x_charge
+              state: "off"
+          sequence:
+            - action: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.car_charger
+              continue_on_error: true
+      default: []
+
+# ---------------------------------------------------------------------------
+# High pack current — stop car charging when |amps| ≥ 300 A
+# (+ charge into pack, − discharge out of pack). Latched notify until |I| < 250 A.
+# ---------------------------------------------------------------------------
+
+- id: pack_amps_high_stop_car_charger
+  alias: Pack amps ≥ 300 A — stop car charger
+  description: >
+    Stops Tessie car charging when pack |current| ≥ 300 A. One notify per trip
+    until current falls below 250 A (hysteresis).
+  mode: single
+  max_exceeded: silent
+  triggers:
+    - trigger: numeric_state
+      entity_id: sensor.battery_storage_tesla_pack_current
+      above: 300
+      id: charge_over_300
+    - trigger: numeric_state
+      entity_id: sensor.battery_storage_tesla_pack_current
+      below: -300
+      id: discharge_over_300
+    - trigger: state
+      entity_id: switch.x_charge
+      to: "on"
+      id: charge_reenabled
+    - trigger: time_pattern
+      minutes: "/1"
+      id: periodic_check
+    - trigger: homeassistant
+      event: start
+      id: ha_start
+  conditions:
+    - condition: template
+      value_template: >-
+        {% set bad = ['unavailable','unknown','none',''] %}
+        {% set a = states('sensor.battery_storage_tesla_pack_current') %}
+        {% if a in bad %}
+          false
+        {% else %}
+          {{ (a|float(0))|abs >= 300 }}
+        {% endif %}
+    - condition: or
+      conditions:
+        - condition: state
+          entity_id: switch.x_charge
+          state: "on"
+        - condition: state
+          entity_id: sensor.x_charging
+          state: charging
+        - condition: state
+          entity_id: sensor.x_charging
+          state: starting
+        - condition: state
+          entity_id: input_boolean.car_charger
+          state: "on"
+  actions:
+    - if:
+        - condition: template
+          value_template: "{{ trigger.id | default('') == 'ha_start' }}"
+      then:
+        - delay:
+            seconds: 30
+        - condition: template
+          value_template: >-
+            {% set bad = ['unavailable','unknown','none',''] %}
+            {% set a = states('sensor.battery_storage_tesla_pack_current') %}
+            {% if a in bad %}
+              false
+            {% else %}
+              {{ (a|float(0))|abs >= 300 }}
+            {% endif %}
+        - condition: or
+          conditions:
+            - condition: state
+              entity_id: switch.x_charge
+              state: "on"
+            - condition: state
+              entity_id: sensor.x_charging
+              state: charging
+            - condition: state
+              entity_id: sensor.x_charging
+              state: starting
+    # Debounce — require still high after a few seconds
+    - delay:
+        seconds: 5
+    - condition: template
+      value_template: >-
+        {% set bad = ['unavailable','unknown','none',''] %}
+        {% set a = states('sensor.battery_storage_tesla_pack_current') %}
+        {% if a in bad %}
+          false
+        {% else %}
+          {{ (a|float(0))|abs >= 300 }}
+        {% endif %}
+    - condition: or
+      conditions:
+        - condition: state
+          entity_id: switch.x_charge
+          state: "on"
+        - condition: state
+          entity_id: sensor.x_charging
+          state: charging
+        - condition: state
+          entity_id: sensor.x_charging
+          state: starting
+    - action: script.shutdown_car_charger_silent
+      continue_on_error: true
+    - if:
+        - condition: state
+          entity_id: input_boolean.pack_amps_trip_sent
+          state: "off"
+      then:
+        - action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.pack_amps_trip_sent
+          continue_on_error: true
+        - action: script.notify_iphone
+          data:
+            title: "Pack amps high — car charging stopped"
+            message: >-
+              Pack current {{ states('sensor.battery_storage_tesla_pack_current') }} A
+              (|I| ≥ 300). Trigger {{ trigger.id | default('unknown') }}.
+              Tessie charge stopped. SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}% ·
+              {{ states('sensor.battery_storage_tesla_pack_volts') }} V.
+            tag: pack_amps_protection
+            notification_id: pack_amps_high
+          continue_on_error: true
+    - action: logbook.log
+      data:
+        name: Pack amps protection
+        message: >-
+          |I|≥300 — {{ states('sensor.battery_storage_tesla_pack_current') }} A —
+          car charging stopped ({{ trigger.id | default('unknown') }})
+        entity_id: sensor.battery_storage_tesla_pack_current
+      continue_on_error: true
+
+# Clear high-amps latch when current is back in a safe band
+- id: pack_amps_trip_latch_reset
+  alias: Pack amps trip latch reset
+  description: Clears high-amps notify latch when |current| < 250 A for a while.
+  mode: single
+  max_exceeded: silent
+  triggers:
+    - trigger: state
+      entity_id: sensor.battery_storage_tesla_pack_current
+    - trigger: time_pattern
+      minutes: "/2"
+  conditions:
+    - condition: state
+      entity_id: input_boolean.pack_amps_trip_sent
+      state: "on"
+    - condition: template
+      value_template: >-
+        {% set bad = ['unavailable','unknown','none',''] %}
+        {% set a = states('sensor.battery_storage_tesla_pack_current') %}
+        {% if a in bad %}
+          false
+        {% else %}
+          {{ (a|float(0))|abs < 250 }}
+        {% endif %}
+  actions:
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.pack_amps_trip_sent
+      continue_on_error: true
+    - action: logbook.log
+      data:
+        name: Pack amps protection
+        message: >-
+          Latch cleared — current
+          {{ states('sensor.battery_storage_tesla_pack_current') }} A
+          (|I| < 250)
+        entity_id: sensor.battery_storage_tesla_pack_current
+      continue_on_error: true
+
+# ---------------------------------------------------------------------------
+# Device offline watch — BMS pack, WebBox, Tessie/car
+# Uses script.check_critical_devices (latched notify via script.notify_device_offline)
+# ---------------------------------------------------------------------------
+
+# Entity stays unavailable/unknown for a long time before we re-check
+- id: device_offline_entity_unavailable
+  alias: Device offline — entity unavailable
+  description: >
+    Waits 15 minutes in unavailable/unknown, then runs check_critical_devices
+    (script also enforces 15–30 min grace).
+  mode: queued
+  max_exceeded: silent
+  triggers:
+    - trigger: state
+      entity_id:
+        - sensor.battery_storage_tesla_pack_volts
+        - sensor.battery_storage_tesla_pack_current
+        - sensor.battery_storage_tesla_pack_webbox_power
+        - sensor.x_battery_level
+        - switch.x_charge
+      to:
+        - unavailable
+        - unknown
+      for:
+        minutes: 15
+  actions:
+    - action: script.check_critical_devices
+      continue_on_error: true
+
+# Recovery: must stay healthy a few minutes before online notify
+- id: device_online_entity_recovered
+  alias: Device online — entity recovered
+  description: >
+    After leaving unavailable/unknown, wait 2 minutes healthy then re-check
+    (script requires fresh data before online notify).
+  mode: queued
+  max_exceeded: silent
+  triggers:
+    - trigger: state
+      entity_id:
+        - sensor.battery_storage_tesla_pack_volts
+        - sensor.battery_storage_tesla_pack_webbox_power
+        - sensor.x_battery_level
+        - switch.x_charge
+      from:
+        - unavailable
+        - unknown
+      for:
+        minutes: 2
+  conditions:
+    - condition: template
+      value_template: >-
+        {{ trigger.to_state is not none
+           and trigger.to_state.state not in ['unavailable','unknown','none',''] }}
+  actions:
+    - action: script.check_critical_devices
+      continue_on_error: true
+
+# BMS can stay on last value without going unavailable — long UDP silence
+- id: device_offline_bms_stale
+  alias: Device offline — BMS data stale
+  description: >
+    If pack volts stop updating for ≥ 15 minutes (LiteCAN/UDP silent), treat as offline.
+  mode: single
+  max_exceeded: silent
+  triggers:
+    - trigger: time_pattern
+      minutes: "/5"
+  conditions:
+    - condition: template
+      value_template: >-
+        {% set s = states.sensor.battery_storage_tesla_pack_volts %}
+        {% if s is none %}
+          true
+        {% else %}
+          {{ (now() - s.last_updated).total_seconds() >= 900 }}
+        {% endif %}
+    - condition: state
+      entity_id: input_boolean.device_offline_bms
+      state: "off"
+  actions:
+    - action: script.check_critical_devices
+      continue_on_error: true
+
+# Periodic full scan (offline grace + recovery)
+- id: device_offline_periodic_scan
+  alias: Device offline — periodic scan
+  description: Runs check_critical_devices every 10 minutes.
+  mode: single
+  max_exceeded: silent
+  triggers:
+    - trigger: time_pattern
+      minutes: "/10"
+    - trigger: homeassistant
+      event: start
+  actions:
+    - delay:
+        minutes: 2
+    - action: script.check_critical_devices
+      continue_on_error: true

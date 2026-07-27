@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.0
+
+- SMA WebBox sensors on plant UI: plant power, daily yield, total yield
+- WebBox ring gauge + tiles next to Envoy solar
+
 ## 2.0.0
 
 - **All-in-one app**: plant UI + Tesla EVTV BMS integration installer
