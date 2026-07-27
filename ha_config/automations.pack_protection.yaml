@@ -1,0 +1,179 @@
+# ---------------------------------------------------------------------------
+# Pack protection — stop car charging at cell trigger ≤ 3.2 V (inclusive)
+# Uses state triggers (fires on every live BMS update) + conditions.
+# ---------------------------------------------------------------------------
+- id: pack_lowest_cell_3_2_alert_and_stop_charger
+  alias: Pack lowest cell 3.2 V — stop car charger
+  description: >
+    Stops Tessie charging when lowest/trigger cell ≤ 3.2 V or SoC ≤ 15%.
+    Watches live BMS state changes so it works even if already low at startup.
+  mode: single
+  max_exceeded: silent
+  triggers:
+    # Every live BMS update — conditions decide whether to act
+    - trigger: state
+      entity_id:
+        - sensor.battery_storage_tesla_pack_lowest_cell
+        - sensor.battery_storage_tesla_pack_trigger_cell_voltage
+        - sensor.battery_storage_tesla_pack_state_of_charge
+      id: bms_update
+    - trigger: state
+      entity_id: switch.x_charge
+      to: "on"
+      id: charge_reenabled
+    - trigger: time_pattern
+      minutes: "/1"
+      id: periodic_check
+    - trigger: homeassistant
+      event: start
+      id: ha_start
+  conditions:
+    # Never treat unavailable as low
+    - condition: template
+      value_template: >-
+        {% set bad = ['unavailable', 'unknown', 'none', ''] %}
+        {% set cell_s = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
+        {% set trig_s = states('sensor.battery_storage_tesla_pack_trigger_cell_voltage') %}
+        {% set soc_s = states('sensor.battery_storage_tesla_pack_state_of_charge') %}
+        {% set cell = cell_s | float(99) if cell_s not in bad else 99 %}
+        {% set trig = trig_s | float(99) if trig_s not in bad else 99 %}
+        {% set soc = soc_s | float(100) if soc_s not in bad else 100 %}
+        {{ cell <= 3.2 or trig <= 3.2 or soc <= 15 }}
+    # Car is charging / charge enabled
+    - condition: or
+      conditions:
+        - condition: state
+          entity_id: switch.x_charge
+          state: "on"
+        - condition: state
+          entity_id: sensor.x_charging
+          state: charging
+        - condition: state
+          entity_id: input_boolean.car_charger
+          state: "on"
+  actions:
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.id == 'ha_start' }}"
+          sequence:
+            - delay:
+                seconds: 45
+            - condition: template
+              value_template: >-
+                {% set bad = ['unavailable', 'unknown', 'none', ''] %}
+                {% set cell_s = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
+                {% set trig_s = states('sensor.battery_storage_tesla_pack_trigger_cell_voltage') %}
+                {% set soc_s = states('sensor.battery_storage_tesla_pack_state_of_charge') %}
+                {% set cell = cell_s | float(99) if cell_s not in bad else 99 %}
+                {% set trig = trig_s | float(99) if trig_s not in bad else 99 %}
+                {% set soc = soc_s | float(100) if soc_s not in bad else 100 %}
+                {{ cell <= 3.2 or trig <= 3.2 or soc <= 15 }}
+            - condition: or
+              conditions:
+                - condition: state
+                  entity_id: switch.x_charge
+                  state: "on"
+                - condition: state
+                  entity_id: sensor.x_charging
+                  state: charging
+    # Debounce: require low for a few more seconds of live samples
+    - delay:
+        seconds: 8
+    - condition: template
+      value_template: >-
+        {% set bad = ['unavailable', 'unknown', 'none', ''] %}
+        {% set cell_s = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
+        {% set trig_s = states('sensor.battery_storage_tesla_pack_trigger_cell_voltage') %}
+        {% set soc_s = states('sensor.battery_storage_tesla_pack_state_of_charge') %}
+        {% set cell = cell_s | float(99) if cell_s not in bad else 99 %}
+        {% set trig = trig_s | float(99) if trig_s not in bad else 99 %}
+        {% set soc = soc_s | float(100) if soc_s not in bad else 100 %}
+        {{ cell <= 3.2 or trig <= 3.2 or soc <= 15 }}
+    - condition: or
+      conditions:
+        - condition: state
+          entity_id: switch.x_charge
+          state: "on"
+        - condition: state
+          entity_id: sensor.x_charging
+          state: charging
+    - action: script.shutdown_car_charger
+    - action: script.notify_iphone
+      data:
+        title: "Battery protection — charging stopped"
+        message: >-
+          Trigger {{ trigger.id }}:
+          lowest {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V,
+          trigger cell {{ states('sensor.battery_storage_tesla_pack_trigger_cell_voltage') }} V,
+          SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%.
+          Tessie off (≤ 3.2 V or SoC ≤ 15%).
+    - action: logbook.log
+      data:
+        name: Pack protection
+        message: >-
+          {{ trigger.id }} — cell
+          {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V /
+          trigger {{ states('sensor.battery_storage_tesla_pack_trigger_cell_voltage') }} V /
+          SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%
+          — charging stopped
+        entity_id: sensor.battery_storage_tesla_pack_lowest_cell
+
+# Warning when cells approach trip (≤ 3.25 V but still > 3.2 V)
+- id: pack_cell_approaching_3_25_warn
+  alias: Pack cell approaching 3.25 V — warn
+  description: OS notify when lowest cell ≤ 3.25 V (before hard stop at 3.2 V).
+  mode: single
+  max_exceeded: silent
+  triggers:
+    - trigger: state
+      entity_id: sensor.battery_storage_tesla_pack_lowest_cell
+      id: cell
+    - trigger: time_pattern
+      minutes: "/5"
+      id: periodic
+  conditions:
+    - condition: template
+      value_template: >-
+        {% set v = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
+        {% set cell = v | float(99) if v not in ['unavailable','unknown','none',''] else 99 %}
+        {{ cell <= 3.25 and cell > 3.2 }}
+  actions:
+    - action: script.notify_iphone
+      data:
+        title: "Pack cell low warning"
+        message: >-
+          Lowest cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V
+          (hard stop at 3.2 V). SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%.
+          Charging will stop at 3.2 V.
+
+# Keep dashboard flag in sync with Tessie charge switch
+- id: sync_car_charger_boolean_with_x_charge
+  alias: Sync car charger flag with X Charge
+  mode: queued
+  max_exceeded: silent
+  triggers:
+    - trigger: state
+      entity_id: switch.x_charge
+    - trigger: homeassistant
+      event: start
+  actions:
+    - delay:
+        seconds: 3
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: switch.x_charge
+              state: "on"
+          sequence:
+            - action: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.car_charger
+        - conditions:
+            - condition: state
+              entity_id: switch.x_charge
+              state: "off"
+          sequence:
+            - action: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.car_charger
