@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f0f12" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Sunny Island" />
+  <title>Sunny Island</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div id="auth-overlay" class="auth-overlay hidden">
+    <div class="auth-card">
+      <div class="auth-brand">SI</div>
+      <h2>Sunny Island</h2>
+      <p>Long-lived access token for live pack + solar + Tessie data.</p>
+      <input id="token-input" type="password" placeholder="eyJhbGciOiJIUzI1NiIs..." autocomplete="off" />
+      <button id="connect-btn" class="btn-primary">Connect</button>
+      <p class="auth-hint">Profile → Security → Long-Lived Access Tokens</p>
+    </div>
+  </div>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-icon">SI</div>
+        <div>
+          <h1 id="app-title">Sunny Island</h1>
+          <p id="app-subtitle" class="subtitle">Tesla pack · EVTV BMS · Enphase · Tessie</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <span id="connection-status" class="connection-pill" data-status="disconnected">Offline</span>
+        <div class="settings-wrap">
+          <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
+          <div id="settings-panel" class="settings-panel">
+            <button id="start-charger-btn" class="btn-ok-sm">Start charging (Tessie)</button>
+            <button id="shutdown-charger-btn" class="btn-danger-sm">Stop charging (Tessie)</button>
+            <button id="disconnect-btn" class="btn-ghost" style="margin-top:0.5rem">Disconnect</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div id="fault-banner" class="fault-banner hidden" role="alert"></div>
+
+    <main class="dashboard">
+      <!-- Layout like Lovelace: gauges LEFT · content RIGHT -->
+      <div class="main-split">
+        <aside class="gauges-col">
+          <div class="col-label">LIVE GAUGES</div>
+          <div class="gauge-grid">
+            <div class="gauge-item" data-gauge="soc">
+              <svg viewBox="0 0 120 120" class="ring-svg">
+                <circle cx="60" cy="60" r="52" class="ring-track"/>
+                <circle id="g-soc-arc" cx="60" cy="60" r="52" class="ring-fill" pathLength="100"/>
+              </svg>
+              <div class="ring-center">
+                <span id="g-soc-val" class="ring-val">—</span>
+                <span class="ring-unit">SoC</span>
+              </div>
+            </div>
+            <div class="gauge-item" data-gauge="volts">
+              <svg viewBox="0 0 120 120" class="ring-svg">
+                <circle cx="60" cy="60" r="52" class="ring-track"/>
+                <circle id="g-volts-arc" cx="60" cy="60" r="52" class="ring-fill ring-blue" pathLength="100"/>
+              </svg>
+              <div class="ring-center">
+                <span id="g-volts-val" class="ring-val">—</span>
+                <span class="ring-unit">V</span>
+              </div>
+            </div>
+            <div class="gauge-item" data-gauge="amps">
+              <svg viewBox="0 0 120 120" class="ring-svg">
+                <circle cx="60" cy="60" r="52" class="ring-track"/>
+                <circle id="g-amps-arc" cx="60" cy="60" r="52" class="ring-fill" pathLength="100"/>
+              </svg>
+              <div class="ring-center">
+                <span id="g-amps-val" class="ring-val">—</span>
+                <span class="ring-unit">A</span>
+              </div>
+            </div>
+            <div class="gauge-item" data-gauge="power">
+              <svg viewBox="0 0 120 120" class="ring-svg">
+                <circle cx="60" cy="60" r="52" class="ring-track"/>
+                <circle id="g-power-arc" cx="60" cy="60" r="52" class="ring-fill ring-orange" pathLength="100"/>
+              </svg>
+              <div class="ring-center">
+                <span id="g-power-val" class="ring-val">—</span>
+                <span class="ring-unit">W</span>
+              </div>
+            </div>
+            <div class="gauge-item" data-gauge="solar">
+              <svg viewBox="0 0 120 120" class="ring-svg">
+                <circle cx="60" cy="60" r="52" class="ring-track"/>
+                <circle id="g-solar-arc" cx="60" cy="60" r="52" class="ring-fill ring-amber" pathLength="100"/>
+              </svg>
+              <div class="ring-center">
+                <span id="g-solar-val" class="ring-val">—</span>
+                <span class="ring-unit">Solar kW</span>
+              </div>
+            </div>
+            <div class="gauge-item" data-gauge="load">
+              <svg viewBox="0 0 120 120" class="ring-svg">
+                <circle cx="60" cy="60" r="52" class="ring-track"/>
+                <circle id="g-load-arc" cx="60" cy="60" r="52" class="ring-fill ring-load" pathLength="100"/>
+              </svg>
+              <div class="ring-center">
+                <span id="g-load-val" class="ring-val">—</span>
+                <span class="ring-unit">Load kW</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <section class="content-col">
+          <div class="status-bar card">
+            <div class="status-left">
+              <div class="brand-icon sm">SI</div>
+              <div>
+                <div class="status-title">Sunny Island</div>
+                <div class="status-sub">2-line 12S · EVTV BMS · Enphase</div>
+              </div>
+            </div>
+            <span id="status-pill" class="status-pill">—</span>
+          </div>
+
+          <div class="kpi-row">
+            <div class="kpi card">
+              <div class="kpi-label">VOLTAGE</div>
+              <div id="kpi-volts" class="kpi-value blue">—</div>
+              <div class="kpi-meta">SoC <b id="kpi-soc">—</b></div>
+            </div>
+            <div class="kpi card">
+              <div class="kpi-label">CURRENT</div>
+              <div id="kpi-amps" class="kpi-value">—</div>
+              <div class="kpi-meta"><b id="kpi-flow">—</b> · <span id="kpi-power">—</span></div>
+            </div>
+          </div>
+
+          <div class="tile-grid" id="pack-tiles">
+            <div class="tile" data-metric="available"><span class="tile-l">Available</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="fault"><span class="tile-l">BMS fault</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="chargeDay"><span class="tile-l">Charge today</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="dischargeDay"><span class="tile-l">Discharge today</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="lowestCell"><span class="tile-l">Lowest cell</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="highestCell"><span class="tile-l">Highest cell</span><span class="metric-value">—</span></div>
+          </div>
+
+          <div class="section-label">TESSIE · CAR kWh</div>
+          <div class="tile-grid">
+            <div class="tile" data-metric="carSessionKwh"><span class="tile-l">Session kWh</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="carEnergyRem"><span class="tile-l">Remaining kWh</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="carLifetimeKwh"><span class="tile-l">Lifetime kWh</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="carBattery"><span class="tile-l">Car battery</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="carStatus"><span class="tile-l">Charge status</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="carChargerKw"><span class="tile-l">Charger kW</span><span class="metric-value">—</span></div>
+          </div>
+
+          <div class="action-row">
+            <button id="start-charger-main" class="btn-ok">Start charging</button>
+            <button id="stop-charger-main" class="btn-danger">Stop charging</button>
+          </div>
+          <p class="protect-note">Protection · cell ≤ 3.2 V · SoC ≤ 15% · |pack A| ≥ 300 → stop car charge · − discharge · + charge</p>
+
+          <div class="card spark-card">
+            <h2 class="card-title">Pack power trend</h2>
+            <canvas id="power-sparkline" width="480" height="110"></canvas>
+          </div>
+        </section>
+      </div>
+
+      <section id="metrics-grid" class="metrics-grid"></section>
+    </main>
+
+    <div id="toast" class="toast" role="status"></div>
+    <footer class="footer">
+      <span>Sunny Island plant app</span>
+      <span>·</span>
+      <span>Home Assistant live data</span>
+      <span>·</span>
+      <span id="year"></span>
+    </footer>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/ha-client.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
