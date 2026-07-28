@@ -197,11 +197,21 @@
     }
   }
 
+  // Matches signs.py: DISCHARGE_IS_NEGATIVE + idle band (IDLE_BAND_A).
   function flowFromCurrent(current) {
     if (isNaN(current)) return { label: '—', mode: 'idle' };
-    if (current > 1) return { label: 'CHARGE', mode: 'charge' };
-    if (current < -1) return { label: 'DISCHARGE', mode: 'discharge' };
-    return { label: 'IDLE', mode: 'idle' };
+    const band = typeof IDLE_BAND_A === 'number' ? IDLE_BAND_A : 1.0;
+    if (Math.abs(current) <= band) return { label: 'IDLE', mode: 'idle' };
+    const dischargeNeg =
+      typeof DISCHARGE_IS_NEGATIVE === 'boolean' ? DISCHARGE_IS_NEGATIVE : true;
+    if (dischargeNeg) {
+      return current < 0
+        ? { label: 'DISCHARGE', mode: 'discharge' }
+        : { label: 'CHARGE', mode: 'charge' };
+    }
+    return current > 0
+      ? { label: 'DISCHARGE', mode: 'discharge' }
+      : { label: 'CHARGE', mode: 'charge' };
   }
 
   function num(entityKey) {

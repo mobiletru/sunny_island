@@ -2,9 +2,17 @@
  * Sunny Island plant app — entity map
  * Tesla EVTV BMS pack + Enphase Envoy only (no WebBox).
  * Pure vanilla JS — no external UI frameworks.
+ *
+ * PACK_PREFIX must match the Tesla EVTV BMS integration entity_prefix
+ * (and the add-on pack_prefix option). render_config.py rewrites these consts.
+ *
+ * Sign policy must match custom_components/tesla_evtv_bms/signs.py:
+ * DISCHARGE_IS_NEGATIVE = true → negative amps = discharge.
  */
 const PACK_PREFIX = 'battery_storage_tesla_pack';
 const ENVOY_PREFIX = 'sensor.envoy_122039004946';
+const DISCHARGE_IS_NEGATIVE = true;
+const IDLE_BAND_A = 1.0;
 
 const BAD_STATES = new Set(['unknown', 'unavailable', 'none', '']);
 

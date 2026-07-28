@@ -12,7 +12,8 @@ Vanilla JS over HA WebSocket. No WebBox UI kits.
 ## What it does on start
 
 - Syncs `custom_components/tesla_evtv_bms` into `/config` (when `auto_sync: true`)
-- Optionally copies YAML dashboards / examples under `/config`
+- Optionally copies YAML dashboards / examples under `/config` (respects `force_overwrite`)
+- Writes `dashboards/sunny_island/lovelace_include.yaml` — **never rewrites** `configuration.yaml`
 - Serves the **Sunny Island** Ingress plant UI
 
 ## Layout (UI)
@@ -20,7 +21,7 @@ Vanilla JS over HA WebSocket. No WebBox UI kits.
 - **Left:** live ring gauges (SoC, V, A, power, solar, load)
 - **Right:** KPIs, pack tiles, Tessie kWh, charge buttons, power trend
 
-Sign convention: **− discharge · + charge**
+Sign convention: **− discharge · + charge** (matches `signs.py`)
 
 ## Install
 
@@ -28,7 +29,9 @@ Sign convention: **− discharge · + charge**
 2. Settings → Apps → Local → **Sunny Island** → Install → Start
 3. Sidebar → **Sunny Island**
 4. If the BMS integration is new: Devices & services → Add **Tesla EVTV BMS**
-5. Paste a long-lived HA token in the UI (or set `ha_token` in options)
+5. Set **entity prefix** on the integration to match add-on `pack_prefix` (default `battery_storage_tesla_pack`)
+6. Paste a long-lived HA token in the UI (or set `ha_token` in options)
+7. Optional: merge `dashboards/sunny_island/lovelace_include.yaml` under `lovelace.dashboards`
 
 ## Options
 
@@ -36,17 +39,16 @@ Sign convention: **− discharge · + charge**
 |--------|---------|--------|
 | `auto_sync` | `true` | Copy BMS integration into `/config` |
 | `install_dashboard` | `true` | Copy YAML dashboards under `/config/dashboards/sunny_island` |
-| `force_overwrite` | `true` | Overwrite existing integration files on sync |
-| `pack_prefix` | `battery_storage_tesla_pack` | Sensor prefix (no `sensor.`) |
+| `force_overwrite` | `false` | Overwrite existing integration/dashboard files on sync |
+| `pack_prefix` | `battery_storage_tesla_pack` | Must match integration **entity_prefix** |
 | `envoy_prefix` | `sensor.envoy_…` | Envoy entity prefix |
 | `ha_token` | _(empty)_ | Optional long-lived token for the plant UI |
 
-## Hard-delete old GitHub repos
+## Development
 
 ```bash
-echo 'ghp_YOUR_TOKEN_WITH_delete_repo' > /root/.github-token
-chmod 600 /root/.github-token
-/addons/sunny_island/scripts/delete-old-repos.sh
+# Pure-unit tests (no HA required)
+cd /addons/sunny_island && python3 -m pytest tests/ -q
 ```
 
 ## License

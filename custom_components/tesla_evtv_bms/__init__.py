@@ -18,9 +18,9 @@ from .const import (
     DOMAIN,
     PLATFORMS,
     SIGNAL_UPDATE_ENTITY,
-    pack_config_from_data,
 )
 from .parser import parse_udp_packet
+from .runtime import PackRuntime
 from .webbox import async_poll_webbox
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,16 +35,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     port = entry.data["port"]
     name_lower = name.lower()
 
-    if DOMAIN not in hass.data:
-        hass.data[DOMAIN] = {}
-
-    pack_data = {
-        "entities": {},
-        "values": {},
-        "config": pack_config_from_data(entry.data),
-        "socket": None,
-    }
-    hass.data[DOMAIN][name_lower] = pack_data
+    hass.data.setdefault(DOMAIN, {})
+    runtime = PackRuntime.from_entry_data(entry.data)
+    hass.data[DOMAIN][name_lower] = runtime
 
     def udp_callback(sock):
         try:
@@ -52,7 +45,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             parsed = parse_udp_packet(data, port)
             if not parsed:
                 return
-            # Send only the delta for this frame — sensor platform merges
             async_dispatcher_send(
                 hass,
                 SIGNAL_UPDATE_ENTITY.format(name_lower),
@@ -60,7 +52,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
         except BlockingIOError:
             pass
-        except Exception as e:
+        except OSError as e:
             _LOGGER.error("[%s] UDP read error on %s: %s", DOMAIN, name, e)
 
     try:
@@ -70,11 +62,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         sock.setblocking(False)
         loop = asyncio.get_running_loop()
         loop.add_reader(sock.fileno(), udp_callback, sock)
-        pack_data["socket"] = sock
-        pack_data["loop"] = loop
-        _LOGGER.info("Started non-blocking UDP listener for %s on port %d", name, port)
+        runtime.socket = sock
+        runtime.loop = loop
+        _LOGGER.info(
+            "Started non-blocking UDP listener for %s on port %d (prefix=%s)",
+            name,
+            port,
+            runtime.entity_prefix,
+        )
     except OSError as e:
         _LOGGER.error("Failed to bind UDP socket on port %d for %s: %s", port, name, e)
+        hass.data[DOMAIN].pop(name_lower, None)
         return False
 
     webbox_host = (entry.data.get(CONF_WEBBOX_HOST) or "").strip()
@@ -140,10 +138,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     name_lower = entry.data["name"].lower()
-    pack_data = hass.data.get(DOMAIN, {}).get(name_lower, {})
+    runtime = hass.data.get(DOMAIN, {}).get(name_lower)
 
-    sock = pack_data.get("socket")
-    loop = pack_data.get("loop")
+    if isinstance(runtime, PackRuntime):
+        sock = runtime.socket
+        loop = runtime.loop
+    else:
+        # Legacy dict shape
+        pack_data = runtime or {}
+        sock = pack_data.get("socket")
+        loop = pack_data.get("loop")
+
     if sock is not None:
         try:
             if loop is not None:

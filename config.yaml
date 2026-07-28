@@ -1,5 +1,5 @@
 name: Sunny Island
-version: "2.1.0"
+version: "2.1.1"
 slug: sunny_island
 description: >-
   All-in-one plant app: Tesla EVTV BMS integration installer (LiteCAN UDP) plus
@@ -29,7 +29,7 @@ ports_description:
 options:
   auto_sync: true
   install_dashboard: true
-  force_overwrite: true
+  force_overwrite: false
   pack_prefix: battery_storage_tesla_pack
   envoy_prefix: sensor.envoy_122039004946
   ha_token: ""

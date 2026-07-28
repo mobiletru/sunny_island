@@ -9,11 +9,13 @@
 
 On start, with `auto_sync: true` and `map: config:rw`:
 
-- `/config/custom_components/tesla_evtv_bms`
-- optional `/config/dashboards/sunny_island`
+- `/config/custom_components/tesla_evtv_bms` (honors `force_overwrite`)
+- optional `/config/dashboards/sunny_island` + `lovelace_include.yaml`
 - examples under `/config/sunny_island_examples`
 
-Status is written to `/data/status.json` (and `www/status.json`).
+**Never rewrites** `/config/configuration.yaml`.
+
+Status is written to `/data/status.json`.
 
 ## Plant UI connection
 
@@ -24,7 +26,9 @@ WebSocket to HA (`/api/websocket`) using either:
 
 ## Entities
 
-Configured via `pack_prefix` and `envoy_prefix`. Tessie: `sensor.x_*` / `switch.x_charge`.
+- Integration option **entity_prefix** → `sensor.<prefix>_<key>`
+- Add-on option **pack_prefix** must match (drives plant UI `config.js`)
+- Tessie: `sensor.x_*` / `switch.x_charge`
 
 ## Scripts
 

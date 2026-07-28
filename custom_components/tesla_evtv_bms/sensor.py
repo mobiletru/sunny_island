@@ -1,6 +1,5 @@
 import logging
 import time
-from datetime import timedelta
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -14,7 +13,8 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval, async_track_time_change
 
-from .const import DOMAIN, SIGNAL_UPDATE_ENTITY, pack_config_from_data, WEBBOX_SENSOR_KEYS
+from .const import DOMAIN, SIGNAL_UPDATE_ENTITY, WEBBOX_SENSOR_KEYS
+from .runtime import PackRuntime, ROLLING_SPECS
 from .calculations import (
     UTILITY_METER_PERIODS,
     apply_derived_state,
@@ -27,11 +27,6 @@ from .calculations import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-ROLLING_AVERAGE_INTERVALS = {
-    "power_average": {"interval": timedelta(minutes=1), "window": 10, "samples": []},
-    "power_hourly_average": {"interval": timedelta(minutes=5), "window": 12, "samples": []},
-}
 
 # Allowlist: only these keys become HA sensors (default-deny for everything else).
 SENSOR_TYPES = {
@@ -143,7 +138,6 @@ ICON_MAP = {
 
 WEBBOX_KEY_PREFIXES = ("webbox_",)
 
-# --- Sensor metadata (single table of categories; avoid parallel key-list drift) ---
 _VOLTAGE_KEYS = frozenset(
     {
         "volts",
@@ -227,9 +221,30 @@ _MEASUREMENT_KEYS = (
     )
 )
 
+BOOTSTRAP_KEYS = [
+    "charge_energy",
+    "discharge_energy",
+    "charge_energy_day",
+    "discharge_energy_day",
+    "available_energy",
+    "power",
+    "current",
+    "volts",
+    "state_of_charge",
+    "battery_status",
+    "lowest_cell",
+    "highest_cell",
+    "average_cell",
+    "fault_status",
+    "summary",
+    "power_average",
+    "power_hourly_average",
+    "hours_to_empty",
+    "hours_to_full",
+]
+
 
 def is_public_sensor_key(key: str) -> bool:
-    """Allowlist: only keys in SENSOR_TYPES are published as HA sensors."""
     return key in SENSOR_TYPES
 
 
@@ -283,19 +298,19 @@ def _values_same(a, b) -> bool:
     return a == b
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
-    name = entry.data["name"].lower()
+def _get_runtime(hass: HomeAssistant, name: str) -> PackRuntime:
+    raw = hass.data.get(DOMAIN, {}).get(name)
+    if isinstance(raw, PackRuntime):
+        return raw
+    raise RuntimeError(f"PackRuntime missing for {name}")
 
-    coordinator = hass.data.setdefault(DOMAIN, {}).setdefault(
-        name,
-        {
-            "entities": {},
-            "values": {},
-            "config": pack_config_from_data(entry.data),
-            "modules": {},
-            "last_651_cells": None,
-        },
-    )
+
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+):
+    name = entry.data["name"].lower()
+    runtime = _get_runtime(hass, name)
+    prefix = runtime.entity_prefix
 
     def _schedule_entity(entity):
         if entity is None or getattr(entity, "hass", None) is None:
@@ -303,105 +318,81 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         try:
             entity.async_write_ha_state()
         except Exception:  # noqa: BLE001
-            _LOGGER.debug("write_ha_state failed for %s", entity.entity_id, exc_info=True)
+            _LOGGER.debug(
+                "write_ha_state failed for %s", entity.entity_id, exc_info=True
+            )
 
     async def add_sensor_entity(key, unit=None):
         if not is_public_sensor_key(key):
             return None
-        if key in coordinator["entities"]:
-            return coordinator["entities"][key]
+        if key in runtime.entities:
+            return runtime.entities[key]
         unit = unit if unit is not None else SENSOR_TYPES.get(key, "")
-        sensor = TeslaEvtvSensor(name, key, unit, coordinator)
-        coordinator["entities"][key] = sensor
+        sensor = TeslaEvtvSensor(name, key, unit, runtime, prefix)
+        runtime.entities[key] = sensor
         async_add_entities([sensor])
         return sensor
 
-    bootstrap_keys = [
-        "charge_energy",
-        "discharge_energy",
-        "charge_energy_day",
-        "discharge_energy_day",
-        "available_energy",
-        "power",
-        "current",
-        "volts",
-        "state_of_charge",
-        "battery_status",
-        "lowest_cell",
-        "highest_cell",
-        "average_cell",
-        "fault_status",
-        "summary",
-    ]
+    bootstrap = list(BOOTSTRAP_KEYS)
     webbox_host = (entry.data.get("webbox_host") or "").strip()
     if webbox_host:
-        bootstrap_keys.extend(WEBBOX_SENSOR_KEYS)
+        bootstrap.extend(WEBBOX_SENSOR_KEYS)
         for key in WEBBOX_SENSOR_KEYS:
-            coordinator["values"].setdefault(key, None)
-    for key in bootstrap_keys:
+            runtime.values.setdefault(key, None)
+    for key in bootstrap:
         await add_sensor_entity(key)
 
     async def handle_update(values):
-        if "config" not in coordinator:
-            return
-
-        if "energy" not in coordinator:
-            coordinator["energy"] = {
-                "charge": 0.0,
-                "discharge": 0.0,
-                "last_update": time.monotonic(),
-            }
-
-        before = dict(coordinator["values"])
+        before = dict(runtime.values)
         now_mono = time.monotonic()
-        modules = coordinator.setdefault("modules", {})
 
         merged, last_651 = merge_cell_frame(
             values,
-            modules,
-            coordinator.get("last_651_cells"),
+            runtime.modules,
+            runtime.last_651_cells,
             now_mono,
         )
-        coordinator["last_651_cells"] = last_651
-        coordinator["values"].update(merged)
+        runtime.last_651_cells = last_651
+        runtime.values.update(merged)
 
-        v = coordinator["values"]
+        energy = runtime.ensure_energy()
         derived = compute_derived_state(
-            v,
-            coordinator["config"],
-            prev_energy=coordinator["energy"],
+            runtime.values,
+            runtime.config,
+            prev_energy=energy,
             now=now_mono,
         )
-        apply_derived_state(v, derived, coordinator["energy"])
+        apply_derived_state(runtime.values, derived, energy)
 
-        for key in list(v.keys()):
+        for key in list(runtime.values.keys()):
             if is_public_sensor_key(key):
                 await add_sensor_entity(key)
 
         now = time.monotonic()
-        for key, entity in list(coordinator["entities"].items()):
+        for key, entity in list(runtime.entities.items()):
             if getattr(entity, "hass", None) is None:
                 continue
-            new_val = v.get(key)
+            new_val = runtime.values.get(key)
             old_val = before.get(key)
             if _values_same(new_val, old_val) and (now - entity._last_update) < entity._cooldown:
                 continue
             entity._last_update = now
             _schedule_entity(entity)
 
-    async_dispatcher_connect(
+    unsub_dispatcher = async_dispatcher_connect(
         hass,
         SIGNAL_UPDATE_ENTITY.format(name),
         handle_update,
     )
+    entry.async_on_unload(unsub_dispatcher)
 
     def create_utility_updater(base_key):
         for label in UTILITY_METER_PERIODS:
-            coordinator["values"].setdefault(f"{base_key}_{label}", 0.0)
+            runtime.values.setdefault(f"{base_key}_{label}", 0.0)
 
         async def reset_meter(meter_key):
-            coordinator["values"][meter_key] = 0.0
-            entity = coordinator["entities"].get(meter_key)
+            runtime.values[meter_key] = 0.0
+            entity = runtime.entities.get(meter_key)
             if entity is not None and getattr(entity, "hass", None) is not None:
                 entity.async_schedule_update_ha_state()
 
@@ -417,74 +408,75 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
                 if now.month == 1:
                     await reset_meter(f"{base}_year")
 
-        async_track_time_change(hass, hourly, minute=0, second=0)
-        async_track_time_change(hass, daily, hour=0, minute=0, second=0)
+        entry.async_on_unload(
+            async_track_time_change(hass, hourly, minute=0, second=0)
+        )
+        entry.async_on_unload(
+            async_track_time_change(hass, daily, hour=0, minute=0, second=0)
+        )
 
     create_utility_updater("discharge_energy")
     create_utility_updater("charge_energy")
 
     def track_rolling_averages(interval_key):
-        interval_info = ROLLING_AVERAGE_INTERVALS[interval_key]
+        interval_info = runtime.rolling[interval_key]
 
         async def updater(now):
-            power = coordinator["values"].get("power")
+            power = runtime.values.get("power")
             interval_info["samples"] = update_rolling_samples(
                 interval_info["samples"], power, interval_info["window"]
             )
             avg = compute_rolling_average(interval_info["samples"])
-            key_name = interval_key
-            if avg is not None:
-                coordinator["values"][key_name] = avg
-                await add_sensor_entity(key_name, "W")
-                _schedule_entity(coordinator["entities"].get(key_name))
+            if avg is None:
+                return
+            runtime.values[interval_key] = avg
+            await add_sensor_entity(interval_key, "W")
+            _schedule_entity(runtime.entities.get(interval_key))
 
-                status = coordinator["values"].get("battery_status", "")
-                available_energy = coordinator["values"].get("available_energy", 0)
-                pack_size = coordinator["config"]["pack_size"]
+            status = runtime.values.get("battery_status", "")
+            available_energy = runtime.values.get("available_energy", 0) or 0
+            pack_size = runtime.config["pack_size"]
 
-                hours = compute_hours_to(avg, status, available_energy, pack_size)
-                coordinator["values"]["hours_to_empty"] = hours["hours_to_empty"]
-                coordinator["values"]["hours_to_full"] = hours["hours_to_full"]
+            hours = compute_hours_to(avg, status, available_energy, pack_size)
+            runtime.values["hours_to_empty"] = hours["hours_to_empty"]
+            runtime.values["hours_to_full"] = hours["hours_to_full"]
 
-                await add_sensor_entity("hours_to_empty", "h")
-                await add_sensor_entity("hours_to_full", "h")
-                _schedule_entity(coordinator["entities"].get("hours_to_empty"))
-                _schedule_entity(coordinator["entities"].get("hours_to_full"))
+            await add_sensor_entity("hours_to_empty", "h")
+            await add_sensor_entity("hours_to_full", "h")
+            _schedule_entity(runtime.entities.get("hours_to_empty"))
+            _schedule_entity(runtime.entities.get("hours_to_full"))
 
-                summary_value = compute_summary(
-                    status,
-                    coordinator["values"]["hours_to_empty"],
-                    coordinator["values"]["hours_to_full"],
-                )
-                coordinator["values"]["summary"] = summary_value
-                await add_sensor_entity("summary", "")
-                _schedule_entity(coordinator["entities"].get("summary"))
+            summary_value = compute_summary(
+                status,
+                runtime.values["hours_to_empty"],
+                runtime.values["hours_to_full"],
+            )
+            runtime.values["summary"] = summary_value
+            await add_sensor_entity("summary", "")
+            _schedule_entity(runtime.entities.get("summary"))
 
-        async_track_time_interval(hass, updater, interval_info["interval"])
+        entry.async_on_unload(
+            async_track_time_interval(hass, updater, interval_info["interval"])
+        )
 
-    for key in ROLLING_AVERAGE_INTERVALS:
+    for key in ROLLING_SPECS:
         track_rolling_averages(key)
 
 
 class TeslaEvtvSensor(SensorEntity, RestoreEntity):
-    """One public BMS / WebBox value.
+    """One public BMS / WebBox value."""
 
-    Entity IDs are pinned to sensor.battery_storage_tesla_pack_<key> for stable
-    automations and Energy dashboard references on this plant.
-    """
-
-    ENTITY_PREFIX = "battery_storage_tesla_pack"
-
-    def __init__(self, device_name, key, unit, coordinator):
+    def __init__(self, device_name, key, unit, runtime: PackRuntime, entity_prefix: str):
         self._device = device_name
         self._key = key
         self._unit = unit
-        self._coordinator = coordinator
+        self._runtime = runtime
+        self._entity_prefix = entity_prefix
         self._state = None
         self._last_update = 0
         self._cooldown = sensor_cooldown(key)
-        self._attr_unique_id = f"{self.ENTITY_PREFIX}_{key}"
-        self.entity_id = f"sensor.{self.ENTITY_PREFIX}_{key}"
+        self._attr_unique_id = f"{entity_prefix}_{key}"
+        self.entity_id = f"sensor.{entity_prefix}_{key}"
         self._attr_name = f"{device_name} {key.replace('_', ' ').title()}"
         self._attr_icon = ICON_MAP.get(key, "mdi:chip")
         self._attr_native_unit_of_measurement = unit or None
@@ -500,13 +492,13 @@ class TeslaEvtvSensor(SensorEntity, RestoreEntity):
 
     @property
     def native_value(self):
-        return self._coordinator["values"].get(self._key)
+        return self._runtime.values.get(self._key)
 
     @property
     def available(self) -> bool:
         if self._key.startswith(WEBBOX_KEY_PREFIXES):
             return True
-        return self._key in self._coordinator["values"]
+        return self._key in self._runtime.values
 
     @property
     def icon(self):
@@ -562,6 +554,6 @@ class TeslaEvtvSensor(SensorEntity, RestoreEntity):
         old_state = await self.async_get_last_state()
         if old_state and old_state.state not in (None, "unknown", "unavailable", ""):
             try:
-                self._coordinator["values"][self._key] = float(old_state.state)
+                self._runtime.values[self._key] = float(old_state.state)
             except ValueError:
-                self._coordinator["values"][self._key] = old_state.state
+                self._runtime.values[self._key] = old_state.state
