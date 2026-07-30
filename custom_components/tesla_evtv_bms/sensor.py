@@ -229,8 +229,16 @@ _MEASUREMENT_KEYS = (
 BOOTSTRAP_KEYS = [
     "charge_energy",
     "discharge_energy",
+    "charge_energy_hour",
     "charge_energy_day",
+    "charge_energy_week",
+    "charge_energy_month",
+    "charge_energy_year",
+    "discharge_energy_hour",
     "discharge_energy_day",
+    "discharge_energy_week",
+    "discharge_energy_month",
+    "discharge_energy_year",
     "available_energy",
     "power",
     "current",
@@ -497,7 +505,16 @@ class TeslaEvtvSensor(SensorEntity, RestoreEntity):
 
     @property
     def native_value(self):
-        return self._runtime.values.get(self._key)
+        val = self._runtime.values.get(self._key)
+        if val is None:
+            return None
+        # Display kWh to 3 dp; runtime keeps full float so tiny UDP ticks accumulate
+        if self._key in _ENERGY_TOTAL_KEYS or self._key == "available_energy":
+            try:
+                return round(float(val), 3)
+            except (TypeError, ValueError):
+                return val
+        return val
 
     @property
     def available(self) -> bool:

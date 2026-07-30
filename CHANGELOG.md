@@ -2,6 +2,7 @@
 
 ## 2.1.3
 
+- **Fix:** pack kWh day/hour/week meters — stop rounding every UDP tick (sub-Wh increments were lost; totals worked, period meters stalled)
 - **Feature:** add-on installer syncs `ha_config/packages` → `/config/packages` (WebBox Modbus + helpers) and app-managed scripts/automations on start
 
 ## 2.1.2

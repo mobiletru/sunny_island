@@ -151,7 +151,7 @@ def test_compute_derived_state_applies_energy():
     config = {"pack_size": 75.0, "cells_in_series": 12}
     prev = {"charge": 1.0, "discharge": 2.0, "last_update": 0.0}
     derived = calculations.compute_derived_state(
-        raw, config, prev_energy=prev, now=3600.0
+        raw, config, prev_energy=prev, now=1.0  # 1 s tick (gaps >120 s are ignored)
     )
     values = dict(raw)
     energy = dict(prev)
@@ -159,6 +159,28 @@ def test_compute_derived_state_applies_energy():
     assert values["volts"] == 42.0
     assert values["battery_status"] == "Discharging"
     assert energy["discharge"] > 2.0
+    assert values["discharge_energy_day"] > 0.0
+
+
+def test_period_meters_keep_sub_wh_increments():
+    """UDP ticks ~0.1 s at 3 kW → 8.3e-5 kWh; must not round away each tick."""
+    values = {"charge_energy_day": 0.0, "charge_energy_hour": 0.0}
+    # 3000 W × 0.1 s = 0.0000833… kWh
+    calculations.apply_period_energy_increments(
+        values,
+        {"flow": "charge", "increment": 3000.0 * 0.1 / 3600 / 1000},
+        periods=("hour", "day"),
+    )
+    assert values["charge_energy_day"] > 0.0
+    assert values["charge_energy_day"] < 0.001
+    # Many tiny ticks should reach visible Wh
+    for _ in range(20):
+        calculations.apply_period_energy_increments(
+            values,
+            {"flow": "charge", "increment": 3000.0 * 0.1 / 3600 / 1000},
+            periods=("day",),
+        )
+    assert values["charge_energy_day"] >= 0.001
 
 
 def test_entity_prefix_sanitized():

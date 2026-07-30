@@ -304,14 +304,20 @@ def compute_derived_state(
     if prev_energy is not None and now is not None and power is not None:
         last = prev_energy.get("last_update", now)
         delta = max(0.0, now - last)
+        # Cap absurd gaps (e.g. after suspend) so one tick can't dump hours of kWh
+        if delta > 120.0:
+            delta = 0.0
         energy = accumulate_energy(
             power,
             delta,
             prev_energy.get("charge", 0.0),
             prev_energy.get("discharge", 0.0),
         )
-        derived["charge_energy"] = round(energy["charge"], 3)
-        derived["discharge_energy"] = round(energy["discharge"], 3)
+        # Keep full float precision in runtime — only round for HA display.
+        # Rounding to 3dp every UDP tick (~0.1 s) zeros sub-Wh increments on
+        # period meters (3 kW × 0.1 s ≈ 0.000083 kWh → rounds to 0).
+        derived["charge_energy"] = float(energy["charge"])
+        derived["discharge_energy"] = float(energy["discharge"])
         derived[ENERGY_STATE_KEY] = {
             "charge": energy["charge"],
             "discharge": energy["discharge"],
@@ -331,7 +337,10 @@ def apply_period_energy_increments(
     energy_state: dict[str, Any],
     periods: tuple[str, ...] = UTILITY_METER_PERIODS,
 ) -> None:
-    """Add this tick's kWh increment to hour/day/week/month/year accumulators."""
+    """Add this tick's kWh increment to hour/day/week/month/year accumulators.
+
+    Full float precision — do not round here (see compute_derived_state).
+    """
     flow = energy_state.get("flow")
     increment = energy_state.get("increment", 0.0)
     if not flow or not increment:
@@ -339,7 +348,12 @@ def apply_period_energy_increments(
     base = "discharge_energy" if flow == "discharge" else "charge_energy"
     for label in periods:
         meter_key = f"{base}_{label}"
-        values[meter_key] = round(values.get(meter_key, 0.0) + increment, 3)
+        prev = values.get(meter_key, 0.0)
+        try:
+            prev_f = float(prev)
+        except (TypeError, ValueError):
+            prev_f = 0.0
+        values[meter_key] = prev_f + float(increment)
 
 
 def apply_derived_state(
