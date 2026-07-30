@@ -1,0 +1,62 @@
+# Sunny Island plant package — helpers for charge control + voltage stop.
+# Loaded via: homeassistant.packages: !include_dir_named packages
+
+input_boolean:
+  car_charger:
+    name: Car charger flag
+    icon: mdi:ev-station
+  auto_tessie_amps:
+    name: Auto Tessie amps (from BMS)
+    icon: mdi:current-ac
+    initial: true
+  tessie_stop_on_pack_volts:
+    name: Stop Tessie on low pack V
+    icon: mdi:battery-alert
+    initial: true
+  tessie_stop_on_cell_volts:
+    name: Stop Tessie on low cell V
+    icon: mdi:battery-low
+    initial: true
+
+input_number:
+  tessie_amps_cap:
+    name: Tessie charge amps cap
+    min: 0
+    max: 48
+    step: 1
+    unit_of_measurement: A
+    initial: 32
+    mode: box
+    icon: mdi:speedometer
+
+  # Pack bus voltage (12S ≈ 36–50 V). Default 38.4 V ≈ 3.2 V/cell × 12.
+  tessie_stop_pack_volts:
+    name: Stop Tessie below pack V
+    min: 30
+    max: 50
+    step: 0.1
+    unit_of_measurement: V
+    initial: 38.4
+    mode: box
+    icon: mdi:sine-wave
+
+  # Lowest / trigger cell voltage hard stop
+  tessie_stop_cell_volts:
+    name: Stop Tessie below cell V
+    min: 2.8
+    max: 3.6
+    step: 0.01
+    unit_of_measurement: V
+    initial: 3.2
+    mode: box
+    icon: mdi:battery-outline
+
+  tessie_stop_soc:
+    name: Stop Tessie below pack SoC
+    min: 0
+    max: 50
+    step: 1
+    unit_of_measurement: "%"
+    initial: 15
+    mode: box
+    icon: mdi:battery-30

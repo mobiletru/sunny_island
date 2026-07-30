@@ -13,7 +13,12 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval, async_track_time_change
 
-from .const import DOMAIN, SIGNAL_UPDATE_ENTITY, WEBBOX_SENSOR_KEYS
+from .const import (
+    CONF_WEBBOX_HOST,
+    DOMAIN,
+    SIGNAL_UPDATE_ENTITY,
+    WEBBOX_SENSOR_KEYS,
+)
 from .runtime import PackRuntime, ROLLING_SPECS
 from .calculations import (
     UTILITY_METER_PERIODS,
@@ -334,7 +339,7 @@ async def async_setup_entry(
         return sensor
 
     bootstrap = list(BOOTSTRAP_KEYS)
-    webbox_host = (entry.data.get("webbox_host") or "").strip()
+    webbox_host = (entry.data.get(CONF_WEBBOX_HOST) or "").strip()
     if webbox_host:
         bootstrap.extend(WEBBOX_SENSOR_KEYS)
         for key in WEBBOX_SENSOR_KEYS:

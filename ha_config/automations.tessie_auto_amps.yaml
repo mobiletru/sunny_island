@@ -1,0 +1,45 @@
+# ---------------------------------------------------------------------------
+# Auto Tessie charge current from EVTV BMS
+# Primary: sensor.*_tcch_amps (BMS charge current command)
+# Safety: lowest cell, SoC, charge_enable, highest cell taper, pack discharge
+# Toggle: input_boolean.auto_tessie_amps  ·  Cap: input_number.tessie_amps_cap
+# ---------------------------------------------------------------------------
+- id: tessie_auto_amps_from_bms
+  alias: Tessie auto amps from EVTV BMS
+  description: >
+    While the car is charging (or charge switch is on), set number.x_charge_current
+    from pack TCCH amps with BMS safety clamps. Disabled when auto_tessie_amps is off.
+  mode: queued
+  max: 2
+  max_exceeded: silent
+  triggers:
+    # Avoid every BMS frame — TCCH + charge state + 1 min is enough
+    - trigger: state
+      entity_id:
+        - sensor.battery_storage_tesla_pack_tcch_amps
+        - switch.x_charge
+        - sensor.x_charging
+        - input_boolean.auto_tessie_amps
+        - input_number.tessie_amps_cap
+    - trigger: time_pattern
+      minutes: "/1"
+    - trigger: homeassistant
+      event: start
+  conditions:
+    - condition: state
+      entity_id: input_boolean.auto_tessie_amps
+      state: "on"
+    - condition: or
+      conditions:
+        - condition: state
+          entity_id: switch.x_charge
+          state: "on"
+        - condition: state
+          entity_id: sensor.x_charging
+          state: charging
+        - condition: state
+          entity_id: input_boolean.car_charger
+          state: "on"
+  actions:
+    - action: script.set_tessie_amps_from_bms
+      continue_on_error: true

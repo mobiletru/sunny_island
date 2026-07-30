@@ -1,0 +1,86 @@
+set_tessie_amps_from_bms:
+  alias: Set Tessie amps from EVTV BMS
+  icon: mdi:current-ac
+  description: >
+    Compute target charge amps from EVTV BMS sensors and apply to
+    number.x_charge_current. Uses TCCH amps as base; clamps by cell/SoC/
+    charge_enable and input_number.tessie_amps_cap.
+  mode: queued
+  max: 2
+  max_exceeded: silent
+  sequence:
+    - variables:
+        current_set: >-
+          {% set s = states('number.x_charge_current') %}
+          {{ s | float(-1) if s not in ['unavailable','unknown','none',''] else -1 }}
+        target: >-
+          {% set bad = ['unavailable','unknown','none',''] %}
+          {% set tcch_s = states('sensor.battery_storage_tesla_pack_tcch_amps') %}
+          {% set soc_s = states('sensor.battery_storage_tesla_pack_state_of_charge') %}
+          {% set cell_s = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
+          {% set hcell_s = states('sensor.battery_storage_tesla_pack_highest_cell') %}
+          {% set enable_s = states('sensor.battery_storage_tesla_pack_charge_enable') %}
+          {% set pack_a_s = states('sensor.battery_storage_tesla_pack_current') %}
+          {% set cap_s = states('input_number.tessie_amps_cap') %}
+          {% set tcch = tcch_s | float(0) if tcch_s not in bad else 0 %}
+          {% set soc = soc_s | float(50) if soc_s not in bad else 50 %}
+          {% set cell = cell_s | float(3.7) if cell_s not in bad else 3.7 %}
+          {% set hcell = hcell_s | float(3.7) if hcell_s not in bad else 3.7 %}
+          {% set pack_a = pack_a_s | float(0) if pack_a_s not in bad else 0 %}
+          {% set cap = cap_s | float(32) if cap_s not in bad else 32 %}
+          {# Base = BMS TCCH. If TCCH is 0 but pack is healthy, keep previous floor via 0. #}
+          {% set a = [tcch | round(0, 'floor') | int, 0] | max %}
+          {# Hard stop only on real protection thresholds (matches pack_protection) #}
+          {% if cell <= 3.25 or soc <= 18 %}
+            {% set a = 0 %}
+          {% elif cell <= 3.35 or soc <= 25 %}
+            {% set a = [a, 8] | min %}
+          {% elif hcell >= 4.05 %}
+            {% set a = [a, 5] | min %}
+          {% elif hcell >= 4.00 %}
+            {% set a = [a, 12] | min %}
+          {% endif %}
+          {# charge_enable is advisory on this BMS firmware (often Off while TCCH > 0) — ignore #}
+          {# Pack already discharging hard while car charges — soft limit #}
+          {% if pack_a < -80 %}
+            {% set a = [a, 8] | min %}
+          {% elif pack_a < -40 %}
+            {% set a = [a, 16] | min %}
+          {% endif %}
+          {% set a = [a, cap | int] | min %}
+          {% set a = [a, 48] | min %}
+          {{ [a, 0] | max }}
+        detail: >-
+          {% set bad = ['unavailable','unknown','none',''] %}
+          {% set tcch_s = states('sensor.battery_storage_tesla_pack_tcch_amps') %}
+          {% set soc_s = states('sensor.battery_storage_tesla_pack_state_of_charge') %}
+          {% set cell_s = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
+          {% set hcell_s = states('sensor.battery_storage_tesla_pack_highest_cell') %}
+          {% set enable_s = states('sensor.battery_storage_tesla_pack_charge_enable') %}
+          {% set pack_a_s = states('sensor.battery_storage_tesla_pack_current') %}
+          {% set cap_s = states('input_number.tessie_amps_cap') %}
+          TCCH {{ tcch_s if tcch_s not in bad else '?' }} A,
+          cell {{ cell_s if cell_s not in bad else '?' }} V,
+          high {{ hcell_s if hcell_s not in bad else '?' }} V,
+          SoC {{ soc_s if soc_s not in bad else '?' }}%,
+          pack {{ pack_a_s if pack_a_s not in bad else '?' }} A,
+          enable {{ enable_s }},
+          cap {{ cap_s if cap_s not in bad else '?' }} A
+    - if:
+        - condition: template
+          value_template: "{{ target | int != current_set | int }}"
+      then:
+        - continue_on_error: true
+          action: number.set_value
+          target:
+            entity_id: number.x_charge_current
+          data:
+            value: "{{ target | int }}"
+        - continue_on_error: true
+          action: logbook.log
+          data:
+            name: Tessie auto amps
+            message: >-
+              Set charge current {{ current_set | int }} A → {{ target | int }} A
+              ({{ detail }})
+            entity_id: number.x_charge_current

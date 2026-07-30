@@ -74,34 +74,47 @@ start_car_charger:
   icon: mdi:ev-station
   description: >
     Start Tesla charging via Tessie (switch.x_charge → start_charging).
-    Blocked if pack lowest cell ≤ 3.2 V or SoC ≤ 15%. Wakes car, sets 18 A,
+    Blocked if pack lowest cell ≤ 3.2 V or SoC ≤ 15%. Wakes car, sets charge
+    amps from EVTV BMS (TCCH + safety via script.set_tessie_amps_from_bms),
     notifies Companion (Plaid).
   mode: single
   sequence:
     - variables:
-        cell: "{{ states('sensor.battery_storage_tesla_pack_lowest_cell') | float(99) }}"
-        soc: "{{ states('sensor.battery_storage_tesla_pack_state_of_charge') | float(100) }}"
+        pack_s: "{{ states('sensor.battery_storage_tesla_pack_volts') }}"
         cell_s: "{{ states('sensor.battery_storage_tesla_pack_lowest_cell') }}"
         soc_s: "{{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}"
+        blocked: >-
+          {% set bad = ['unavailable', 'unknown', 'none', ''] %}
+          {% set pack = pack_s | float(99) if pack_s not in bad else 99 %}
+          {% set cell = cell_s | float(99) if cell_s not in bad else 99 %}
+          {% set soc = soc_s | float(100) if soc_s not in bad else 100 %}
+          {% set stop_pack = states('input_number.tessie_stop_pack_volts') | float(38.4) %}
+          {% set stop_cell = states('input_number.tessie_stop_cell_volts') | float(3.2) %}
+          {% set stop_soc = states('input_number.tessie_stop_soc') | float(15) %}
+          {% set use_pack = is_state('input_boolean.tessie_stop_on_pack_volts', 'on') %}
+          {% set use_cell = is_state('input_boolean.tessie_stop_on_cell_volts', 'on') %}
+          {{ (use_pack and pack <= stop_pack)
+             or (use_cell and cell <= stop_cell)
+             or (soc <= stop_soc) }}
     - if:
         - condition: template
-          value_template: >-
-            {% set bad = ['unavailable', 'unknown', 'none', ''] %}
-            {% set cell_ok = cell_s not in bad %}
-            {% set soc_ok = soc_s not in bad %}
-            {{ (cell_ok and cell <= 3.2) or (soc_ok and soc <= 15) }}
+          value_template: "{{ blocked | bool }}"
       then:
         - action: script.notify_iphone
           data:
             title: "Start charging blocked"
             message: >-
-              Pack too low to start charging (cell {{ cell_s }} V, SoC {{ soc_s }}%).
-              Protection threshold is 3.2 V / 15% SoC.
+              Pack below stop threshold
+              (pack {{ pack_s }} V / cell {{ cell_s }} V / SoC {{ soc_s }}%).
+              Stops: pack ≤ {{ states('input_number.tessie_stop_pack_volts') }} V,
+              cell ≤ {{ states('input_number.tessie_stop_cell_volts') }} V,
+              SoC ≤ {{ states('input_number.tessie_stop_soc') }}%.
         - action: persistent_notification.create
           data:
             title: Start charging blocked
             message: >-
-              Cell {{ cell_s }} V · SoC {{ soc_s }}% — will not start Tessie charge.
+              Pack {{ pack_s }} V · cell {{ cell_s }} V · SoC {{ soc_s }}%
+              — will not start Tessie charge.
             notification_id: car_charger_start_blocked
         - stop: Pack below protection threshold
     # Safe to start
@@ -111,12 +124,21 @@ start_car_charger:
         entity_id: button.x_wake
     - delay:
         seconds: 3
-    - continue_on_error: true
-      action: number.set_value
-      target:
-        entity_id: number.x_charge_current
-      data:
-        value: 18
+    # Amps from EVTV BMS (TCCH + safety); fallback floor if auto script leaves 0
+    - action: script.set_tessie_amps_from_bms
+      continue_on_error: true
+    - if:
+        - condition: template
+          value_template: >-
+            {% set a = states('number.x_charge_current') | float(0) %}
+            {{ a < 1 }}
+      then:
+        - continue_on_error: true
+          action: number.set_value
+          target:
+            entity_id: number.x_charge_current
+          data:
+            value: 8
     - action: switch.turn_on
       target:
         entity_id: switch.x_charge

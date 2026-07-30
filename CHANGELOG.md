@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.1.2
+
+- **Feature:** WebBox sensors on Pack detail + WebBox plant dashboards (gauges, entities, history)
+- **Feature:** Auto Tessie charge amps from EVTV BMS (`tcch_amps` + cell/SoC safety); helpers package + scripts/automations
+- **Fix:** plant UI WebSocket client expands HA `subscribe_entities` compressed state (`s`/`a`/`+`/`-`) so gauges and KPIs update live
+- **Fix:** default LiteCAN UDP port `6550`; default series count **12S** (2×6S plant)
+- **Fix:** Lovelace YAML sources use classic masonry cards (YAML-mode safe; no `type: sections`)
+- **Fix:** WebBox options visible and labeled in integration Configure / reconfigure
+- **Refactor:** single `normalize_entry_data` for setup / reconfigure / options
+- **Refactor:** ha-client compressed-only (no dual wire formats); pure expand helpers + tests
+- **Refactor:** `render_config` rewrites shipped template only (no fallback METRICS clone)
+- **Fix:** installer version-gates integration sync when manifest version changes (not only `force_overwrite`)
+- **Fix:** single app version via `APP_VERSION` / `SI_APP_VERSION` (no hardcoded 2.1.1)
+- Integration **1.8.2**
+
 ## 2.1.1
 
 - **Fix:** stop rewriting host `configuration.yaml`; ship `lovelace_include.yaml` instead

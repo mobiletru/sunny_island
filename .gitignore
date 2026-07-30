@@ -3,7 +3,9 @@
 __pycache__/
 .DS_Store
 *.log
-www/
 /data/
 *.token
 .github-token
+
+# generated host merges (built into /config/scripts.yaml · automations.yaml)
+ha_config/*.merged.yaml

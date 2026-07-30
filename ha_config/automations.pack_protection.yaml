@@ -1,18 +1,25 @@
 # ---------------------------------------------------------------------------
-# Pack protection — stop car charging at cell trigger ≤ 3.2 V (inclusive)
-# Uses state triggers (fires on every live BMS update) + conditions.
+# Pack protection — stop Tessie from EVTV BMS voltage / SoC thresholds
+# Thresholds: input_number.tessie_stop_pack_volts / _cell_volts / _soc
+# Enable:     input_boolean.tessie_stop_on_pack_volts / _on_cell_volts
 # ---------------------------------------------------------------------------
-- id: pack_lowest_cell_3_2_alert_and_stop_charger
-  alias: Pack lowest cell 3.2 V — stop car charger
+
+# Shared trip template notes (used inline below):
+#   pack V  ≤ tessie_stop_pack_volts   (if tessie_stop_on_pack_volts on)
+#   cell/trig ≤ tessie_stop_cell_volts (if tessie_stop_on_cell_volts on)
+#   SoC     ≤ tessie_stop_soc
+
+- id: pack_bms_voltage_stop_tessie
+  alias: EVTV BMS voltage — stop Tessie charging
   description: >
-    Stops Tessie charging when lowest/trigger cell ≤ 3.2 V or SoC ≤ 15%.
-    Watches live BMS state changes so it works even if already low at startup.
+    Stops Tessie when pack bus volts, lowest/trigger cell, or SoC fall to/below
+    the configured thresholds. Watches live BMS updates + periodic check.
   mode: single
   max_exceeded: silent
   triggers:
-    # Every live BMS update — conditions decide whether to act
     - trigger: state
       entity_id:
+        - sensor.battery_storage_tesla_pack_volts
         - sensor.battery_storage_tesla_pack_lowest_cell
         - sensor.battery_storage_tesla_pack_trigger_cell_voltage
         - sensor.battery_storage_tesla_pack_state_of_charge
@@ -21,6 +28,14 @@
       entity_id: switch.x_charge
       to: "on"
       id: charge_reenabled
+    - trigger: state
+      entity_id:
+        - input_number.tessie_stop_pack_volts
+        - input_number.tessie_stop_cell_volts
+        - input_number.tessie_stop_soc
+        - input_boolean.tessie_stop_on_pack_volts
+        - input_boolean.tessie_stop_on_cell_volts
+      id: threshold_changed
     - trigger: time_pattern
       minutes: "/1"
       id: periodic_check
@@ -28,18 +43,25 @@
       event: start
       id: ha_start
   conditions:
-    # Never treat unavailable as low
     - condition: template
       value_template: >-
         {% set bad = ['unavailable', 'unknown', 'none', ''] %}
+        {% set pack_s = states('sensor.battery_storage_tesla_pack_volts') %}
         {% set cell_s = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
         {% set trig_s = states('sensor.battery_storage_tesla_pack_trigger_cell_voltage') %}
         {% set soc_s = states('sensor.battery_storage_tesla_pack_state_of_charge') %}
+        {% set pack = pack_s | float(99) if pack_s not in bad else 99 %}
         {% set cell = cell_s | float(99) if cell_s not in bad else 99 %}
         {% set trig = trig_s | float(99) if trig_s not in bad else 99 %}
         {% set soc = soc_s | float(100) if soc_s not in bad else 100 %}
-        {{ cell <= 3.2 or trig <= 3.2 or soc <= 15 }}
-    # Car is charging / charge enabled
+        {% set stop_pack = states('input_number.tessie_stop_pack_volts') | float(38.4) %}
+        {% set stop_cell = states('input_number.tessie_stop_cell_volts') | float(3.2) %}
+        {% set stop_soc = states('input_number.tessie_stop_soc') | float(15) %}
+        {% set use_pack = is_state('input_boolean.tessie_stop_on_pack_volts', 'on') %}
+        {% set use_cell = is_state('input_boolean.tessie_stop_on_cell_volts', 'on') %}
+        {{ (use_pack and pack <= stop_pack)
+           or (use_cell and (cell <= stop_cell or trig <= stop_cell))
+           or (soc <= stop_soc) }}
     - condition: or
       conditions:
         - condition: state
@@ -59,37 +81,28 @@
           sequence:
             - delay:
                 seconds: 45
-            - condition: template
-              value_template: >-
-                {% set bad = ['unavailable', 'unknown', 'none', ''] %}
-                {% set cell_s = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
-                {% set trig_s = states('sensor.battery_storage_tesla_pack_trigger_cell_voltage') %}
-                {% set soc_s = states('sensor.battery_storage_tesla_pack_state_of_charge') %}
-                {% set cell = cell_s | float(99) if cell_s not in bad else 99 %}
-                {% set trig = trig_s | float(99) if trig_s not in bad else 99 %}
-                {% set soc = soc_s | float(100) if soc_s not in bad else 100 %}
-                {{ cell <= 3.2 or trig <= 3.2 or soc <= 15 }}
-            - condition: or
-              conditions:
-                - condition: state
-                  entity_id: switch.x_charge
-                  state: "on"
-                - condition: state
-                  entity_id: sensor.x_charging
-                  state: charging
-    # Debounce: require low for a few more seconds of live samples
+    # Debounce: still low after a few seconds of live BMS samples
     - delay:
         seconds: 8
     - condition: template
       value_template: >-
         {% set bad = ['unavailable', 'unknown', 'none', ''] %}
+        {% set pack_s = states('sensor.battery_storage_tesla_pack_volts') %}
         {% set cell_s = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
         {% set trig_s = states('sensor.battery_storage_tesla_pack_trigger_cell_voltage') %}
         {% set soc_s = states('sensor.battery_storage_tesla_pack_state_of_charge') %}
+        {% set pack = pack_s | float(99) if pack_s not in bad else 99 %}
         {% set cell = cell_s | float(99) if cell_s not in bad else 99 %}
         {% set trig = trig_s | float(99) if trig_s not in bad else 99 %}
         {% set soc = soc_s | float(100) if soc_s not in bad else 100 %}
-        {{ cell <= 3.2 or trig <= 3.2 or soc <= 15 }}
+        {% set stop_pack = states('input_number.tessie_stop_pack_volts') | float(38.4) %}
+        {% set stop_cell = states('input_number.tessie_stop_cell_volts') | float(3.2) %}
+        {% set stop_soc = states('input_number.tessie_stop_soc') | float(15) %}
+        {% set use_pack = is_state('input_boolean.tessie_stop_on_pack_volts', 'on') %}
+        {% set use_cell = is_state('input_boolean.tessie_stop_on_cell_volts', 'on') %}
+        {{ (use_pack and pack <= stop_pack)
+           or (use_cell and (cell <= stop_cell or trig <= stop_cell))
+           or (soc <= stop_soc) }}
     - condition: or
       conditions:
         - condition: state
@@ -98,54 +111,91 @@
         - condition: state
           entity_id: sensor.x_charging
           state: charging
+        - condition: state
+          entity_id: input_boolean.car_charger
+          state: "on"
+    - variables:
+        reason: >-
+          {% set bad = ['unavailable', 'unknown', 'none', ''] %}
+          {% set pack_s = states('sensor.battery_storage_tesla_pack_volts') %}
+          {% set cell_s = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
+          {% set soc_s = states('sensor.battery_storage_tesla_pack_state_of_charge') %}
+          {% set pack = pack_s | float(99) if pack_s not in bad else 99 %}
+          {% set cell = cell_s | float(99) if cell_s not in bad else 99 %}
+          {% set soc = soc_s | float(100) if soc_s not in bad else 100 %}
+          {% set stop_pack = states('input_number.tessie_stop_pack_volts') | float(38.4) %}
+          {% set stop_cell = states('input_number.tessie_stop_cell_volts') | float(3.2) %}
+          {% set stop_soc = states('input_number.tessie_stop_soc') | float(15) %}
+          {% set parts = [] %}
+          {% if is_state('input_boolean.tessie_stop_on_pack_volts', 'on') and pack <= stop_pack %}
+            {% set parts = parts + ['pack ' ~ pack ~ ' V ≤ ' ~ stop_pack ~ ' V'] %}
+          {% endif %}
+          {% if is_state('input_boolean.tessie_stop_on_cell_volts', 'on') and cell <= stop_cell %}
+            {% set parts = parts + ['cell ' ~ cell ~ ' V ≤ ' ~ stop_cell ~ ' V'] %}
+          {% endif %}
+          {% if soc <= stop_soc %}
+            {% set parts = parts + ['SoC ' ~ soc ~ '% ≤ ' ~ stop_soc ~ '%'] %}
+          {% endif %}
+          {{ parts | join(' · ') if parts else 'threshold trip' }}
     - action: script.shutdown_car_charger
     - action: script.notify_iphone
       data:
         title: "Battery protection — charging stopped"
         message: >-
-          Trigger {{ trigger.id }}:
-          lowest {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V,
-          trigger cell {{ states('sensor.battery_storage_tesla_pack_trigger_cell_voltage') }} V,
+          EVTV BMS trip ({{ reason }}).
+          Pack {{ states('sensor.battery_storage_tesla_pack_volts') }} V ·
+          cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V ·
           SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%.
-          Tessie off (≤ 3.2 V or SoC ≤ 15%).
+          Tessie off.
     - action: logbook.log
       data:
         name: Pack protection
         message: >-
-          {{ trigger.id }} — cell
-          {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V /
-          trigger {{ states('sensor.battery_storage_tesla_pack_trigger_cell_voltage') }} V /
-          SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%
-          — charging stopped
-        entity_id: sensor.battery_storage_tesla_pack_lowest_cell
+          {{ trigger.id }} — {{ reason }} — charging stopped
+          (pack {{ states('sensor.battery_storage_tesla_pack_volts') }} V /
+          cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V /
+          SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%)
+        entity_id: sensor.battery_storage_tesla_pack_volts
 
-# Warning when cells approach trip (≤ 3.25 V but still > 3.2 V)
-- id: pack_cell_approaching_3_25_warn
-  alias: Pack cell approaching 3.25 V — warn
-  description: OS notify when lowest cell ≤ 3.25 V (before hard stop at 3.2 V).
+# Warn when approaching pack-V or cell-V trip (within ~0.05 V cell / 0.6 V pack)
+- id: pack_voltage_approaching_stop_warn
+  alias: EVTV BMS voltage approaching stop — warn
+  description: Notify when pack or cell voltage is near the configured stop threshold.
   mode: single
   max_exceeded: silent
   triggers:
     - trigger: state
-      entity_id: sensor.battery_storage_tesla_pack_lowest_cell
-      id: cell
+      entity_id:
+        - sensor.battery_storage_tesla_pack_volts
+        - sensor.battery_storage_tesla_pack_lowest_cell
     - trigger: time_pattern
       minutes: "/5"
-      id: periodic
   conditions:
     - condition: template
       value_template: >-
-        {% set v = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
-        {% set cell = v | float(99) if v not in ['unavailable','unknown','none',''] else 99 %}
-        {{ cell <= 3.25 and cell > 3.2 }}
+        {% set bad = ['unavailable', 'unknown', 'none', ''] %}
+        {% set pack_s = states('sensor.battery_storage_tesla_pack_volts') %}
+        {% set cell_s = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
+        {% set pack = pack_s | float(99) if pack_s not in bad else 99 %}
+        {% set cell = cell_s | float(99) if cell_s not in bad else 99 %}
+        {% set stop_pack = states('input_number.tessie_stop_pack_volts') | float(38.4) %}
+        {% set stop_cell = states('input_number.tessie_stop_cell_volts') | float(3.2) %}
+        {% set use_pack = is_state('input_boolean.tessie_stop_on_pack_volts', 'on') %}
+        {% set use_cell = is_state('input_boolean.tessie_stop_on_cell_volts', 'on') %}
+        {% set near_pack = use_pack and pack > stop_pack and pack <= (stop_pack + 0.6) %}
+        {% set near_cell = use_cell and cell > stop_cell and cell <= (stop_cell + 0.05) %}
+        {{ near_pack or near_cell }}
   actions:
     - action: script.notify_iphone
       data:
-        title: "Pack cell low warning"
+        title: "Pack voltage low warning"
         message: >-
-          Lowest cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V
-          (hard stop at 3.2 V). SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%.
-          Charging will stop at 3.2 V.
+          Approaching Tessie stop:
+          pack {{ states('sensor.battery_storage_tesla_pack_volts') }} V
+          (stop ≤ {{ states('input_number.tessie_stop_pack_volts') }} V) ·
+          cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V
+          (stop ≤ {{ states('input_number.tessie_stop_cell_volts') }} V) ·
+          SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%.
 
 # Keep dashboard flag in sync with Tessie charge switch
 - id: sync_car_charger_boolean_with_x_charge

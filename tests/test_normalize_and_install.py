@@ -1,0 +1,156 @@
+"""Tests for entry-data normalize and version-gated install decisions."""
+
+from __future__ import annotations
+
+import importlib.util
+import sys
+import tempfile
+import types
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+COMPONENT = ROOT / "custom_components" / "tesla_evtv_bms"
+SCRIPTS = ROOT / "scripts"
+
+
+def _load_pkg_mod(mod_name: str, file_name: str):
+    pkg = "tesla_evtv_bms"
+    if pkg not in sys.modules:
+        m = types.ModuleType(pkg)
+        m.__path__ = [str(COMPONENT)]  # type: ignore[attr-defined]
+        sys.modules[pkg] = m
+    full = f"{pkg}.{mod_name}"
+    if full in sys.modules:
+        return sys.modules[full]
+    path = COMPONENT / file_name
+    spec = importlib.util.spec_from_file_location(full, path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[full] = mod
+    spec.loader.exec_module(mod)
+    setattr(sys.modules[pkg], mod_name, mod)
+    return mod
+
+
+const = _load_pkg_mod("const", "const.py")
+_load_pkg_mod("runtime", "runtime.py")
+
+
+def _load_script(name: str):
+    path = SCRIPTS / name
+    # Fresh load each time so tests don't share mutated module globals
+    key = f"si_script_{name.replace('.', '_')}"
+    if key in sys.modules:
+        del sys.modules[key]
+    spec = importlib.util.spec_from_file_location(key, path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[key] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_default_cells_is_12s():
+    assert const.DEFAULT_CELLS_IN_SERIES == 12
+    assert const.DEFAULT_PORT == 6550
+
+
+def test_normalize_strips_webbox_url_and_prefix():
+    data = const.normalize_entry_data(
+        {
+            "name": "Pack",
+            "port": "6550",
+            "entity_prefix": "Battery Storage Tesla Pack",
+            "pack_size": 75,
+            "cells_in_series": 12,
+            "min_cell_volts": 3.2,
+            "max_cell_volts": 4.1,
+            "webbox_host": "https://192.168.1.50/home.ajax",
+            "webbox_password": " secret ",
+            "webbox_scan_interval": 20,
+        }
+    )
+    assert data["webbox_host"] == "192.168.1.50"
+    assert data["webbox_password"] == "secret"
+    assert data["entity_prefix"] == "battery_storage_tesla_pack"
+    assert data["port"] == 6550
+    assert data["webbox_scan_interval"] == 20
+
+
+def test_normalize_preserve_port():
+    existing = {
+        "port": 6550,
+        "name": "Old",
+        "entity_prefix": "battery_storage_tesla_pack",
+    }
+    data = const.normalize_entry_data(
+        {"name": "New", "webbox_host": ""},
+        existing=existing,
+        preserve_port=True,
+    )
+    assert data["port"] == 6550
+    assert data["name"] == "New"
+
+
+def test_should_sync_on_version_mismatch():
+    install = _load_script("install_integration.py")
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        src, dst = base / "src", base / "dst"
+        src.mkdir()
+        dst.mkdir()
+        (src / "manifest.json").write_text('{"version": "1.8.2"}\n')
+        (dst / "manifest.json").write_text('{"version": "1.8.0"}\n')
+        ok, reason = install._should_sync_tree(src, dst, force=False)
+        assert ok is True
+        assert "1.8.0" in reason and "1.8.2" in reason
+
+
+def test_should_skip_same_version():
+    install = _load_script("install_integration.py")
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        src, dst = base / "src", base / "dst"
+        src.mkdir()
+        dst.mkdir()
+        (src / "manifest.json").write_text('{"version": "1.8.2"}\n')
+        (dst / "manifest.json").write_text('{"version": "1.8.2"}\n')
+        ok, reason = install._should_sync_tree(src, dst, force=False)
+        assert ok is False
+        assert "skipped" in reason
+
+
+def test_force_overwrite_always_syncs():
+    install = _load_script("install_integration.py")
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        src, dst = base / "src", base / "dst"
+        src.mkdir()
+        dst.mkdir()
+        (src / "manifest.json").write_text('{"version": "1.8.2"}\n')
+        (dst / "manifest.json").write_text('{"version": "1.8.2"}\n')
+        ok, reason = install._should_sync_tree(src, dst, force=True)
+        assert ok is True
+        assert reason == "force_overwrite"
+
+
+def test_render_config_requires_template():
+    render = _load_script("render_config.py")
+    try:
+        render._build_config_js("p", "e", "", "const OTHER = 1;\n")
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "PACK_PREFIX" in str(exc)
+
+
+def test_render_config_rewrites_prefixes():
+    render = _load_script("render_config.py")
+    template = (
+        "const PACK_PREFIX = 'old';\n"
+        "const ENVOY_PREFIX = 'sensor.old';\n"
+        "const DISCHARGE_IS_NEGATIVE = true;\n"
+    )
+    out = render._build_config_js("new_pack", "sensor.envoy_x", "", template)
+    assert 'const PACK_PREFIX = "new_pack";' in out
+    assert 'const ENVOY_PREFIX = "sensor.envoy_x";' in out
+    assert "DISCHARGE_IS_NEGATIVE" in out

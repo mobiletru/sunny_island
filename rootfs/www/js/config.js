@@ -1,6 +1,6 @@
 /**
  * Sunny Island plant app — entity map
- * Tesla EVTV BMS pack + Enphase Envoy only (no WebBox).
+ * Tesla EVTV BMS pack + Enphase Envoy (+ pack webbox_* when configured on the BMS integration).
  * Pure vanilla JS — no external UI frameworks.
  *
  * PACK_PREFIX must match the Tesla EVTV BMS integration entity_prefix
@@ -65,6 +65,9 @@ const METRICS = {
   loadKw: { entity: `${ENVOY_PREFIX}_current_power_consumption`, label: 'Home Load', format: 'power_kw', group: 'solar' },
   netKw: { entity: `${ENVOY_PREFIX}_current_net_power_consumption`, label: 'Net Grid', format: 'power_kw', group: 'solar' },
   solarToday: { entity: `${ENVOY_PREFIX}_energy_production_today`, label: 'Solar Today', format: 'energy', group: 'solar' },
+  webboxPower: { entity: pack('webbox_power'), label: 'WebBox Power', format: 'power', group: 'webbox' },
+  webboxDay: { entity: pack('webbox_daily_yield'), label: 'WebBox Today', format: 'energy', group: 'webbox' },
+  webboxTotal: { entity: pack('webbox_total_yield'), label: 'WebBox Lifetime', format: 'energy', group: 'webbox' },
 };
 
 const GROUPS = [
@@ -74,6 +77,7 @@ const GROUPS = [
   { id: 'safety', title: 'Safety & car charger' },
   { id: 'energy', title: 'Pack kWh meters' },
   { id: 'solar', title: 'Enphase site' },
+  { id: 'webbox', title: 'SMA WebBox' },
 ];
 
 function getAllEntityIds() {

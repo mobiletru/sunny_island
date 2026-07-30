@@ -143,22 +143,23 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if isinstance(runtime, PackRuntime):
         sock = runtime.socket
         loop = runtime.loop
-    else:
-        # Legacy dict shape
-        pack_data = runtime or {}
-        sock = pack_data.get("socket")
-        loop = pack_data.get("loop")
-
-    if sock is not None:
-        try:
-            if loop is not None:
-                loop.remove_reader(sock.fileno())
-        except Exception as e:
-            _LOGGER.debug("remove_reader: %s", e)
-        try:
-            sock.close()
-        except Exception as e:
-            _LOGGER.debug("socket close: %s", e)
+        if sock is not None:
+            try:
+                if loop is not None:
+                    loop.remove_reader(sock.fileno())
+            except Exception as e:
+                _LOGGER.debug("remove_reader: %s", e)
+            try:
+                sock.close()
+            except Exception as e:
+                _LOGGER.debug("socket close: %s", e)
+    elif runtime is not None:
+        _LOGGER.error(
+            "[%s] unload expected PackRuntime for %s, got %s",
+            DOMAIN,
+            name_lower,
+            type(runtime).__name__,
+        )
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if DOMAIN in hass.data:
