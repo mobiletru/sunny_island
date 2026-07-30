@@ -31,14 +31,14 @@ views:
             max: 100000
             needle: true
           - type: gauge
-            entity: sensor.battery_storage_tesla_pack_webbox_power
-            name: WebBox solar
+            entity: sensor.webbox_plant_power
+            name: WebBox plant W
             min: -15000
             max: 15000
             needle: true
 
       - type: entities
-        title: SMA WebBox
+        title: WebBox HTTP (BMS poller)
         show_header_toggle: false
         entities:
           - entity: sensor.battery_storage_tesla_pack_webbox_power
@@ -47,6 +47,23 @@ views:
             name: Daily yield
           - entity: sensor.battery_storage_tesla_pack_webbox_total_yield
             name: Lifetime yield
+
+      - type: entities
+        title: WebBox Modbus — plant
+        show_header_toggle: false
+        entities:
+          - entity: sensor.webbox_plant_power
+            name: Plant power
+          - entity: sensor.webbox_plant_power_kw
+            name: Plant power kW
+          - entity: sensor.webbox_plant_daily_yield
+            name: Daily yield
+          - entity: sensor.webbox_plant_total_yield
+            name: Total yield
+          - entity: sensor.webbox_device_status
+            name: Device status
+          - entity: sensor.webbox_grid_relay
+            name: Grid relay
 
       - type: entities
         title: Plant at a glance
@@ -149,7 +166,7 @@ views:
     icon: mdi:solar-power
     cards:
       - type: entities
-        title: SMA Sunny WebBox
+        title: WebBox HTTP (BMS poller)
         show_header_toggle: false
         entities:
           - entity: sensor.battery_storage_tesla_pack_webbox_power
@@ -160,11 +177,15 @@ views:
             name: Lifetime
 
       - type: history-graph
-        title: WebBox solar power
+        title: WebBox plant power (Modbus)
         hours_to_show: 24
         entities:
+          - entity: sensor.webbox_plant_power
+            name: Plant Modbus
           - entity: sensor.battery_storage_tesla_pack_webbox_power
-            name: WebBox
+            name: HTTP poller
+          - entity: sensor.webbox_device_power_ac
+            name: Device AC
 
       - type: entities
         title: Enphase (site)
@@ -182,6 +203,105 @@ views:
             name: Consumed today
           - entity: sensor.envoy_122039004946_lifetime_energy_production
             name: Lifetime production
+
+  - title: Modbus
+    path: modbus
+    icon: mdi:lan-connect
+    cards:
+      - type: markdown
+        content: |
+          # WebBox Modbus TCP
+          Host `secrets.webbox_host` · port **502**
+          Unit **1** gateway · **2** plant · **3** device (SI)
+
+      - type: horizontal-stack
+        cards:
+          - type: gauge
+            entity: sensor.webbox_plant_power
+            name: Plant W
+            min: -20000
+            max: 20000
+            needle: true
+          - type: gauge
+            entity: sensor.webbox_grid_voltage
+            name: Grid V
+            min: 100
+            max: 140
+            needle: true
+          - type: gauge
+            entity: sensor.webbox_grid_frequency
+            name: Grid Hz
+            min: 55
+            max: 65
+            needle: true
+
+      - type: entities
+        title: Plant (Unit ID 2)
+        show_header_toggle: false
+        entities:
+          - entity: sensor.webbox_plant_power
+            name: Active power
+          - entity: sensor.webbox_plant_power_kw
+            name: Active power kW
+          - entity: sensor.webbox_plant_daily_yield
+            name: Daily yield
+          - entity: sensor.webbox_plant_total_yield
+            name: Total yield
+
+      - type: entities
+        title: Device / SI parameters (Unit ID 3)
+        show_header_toggle: false
+        entities:
+          - entity: sensor.webbox_device_status
+            name: Status
+          - entity: sensor.webbox_device_status_code
+            name: Status code
+          - entity: sensor.webbox_device_power_ac
+            name: Power AC
+          - entity: sensor.webbox_grid_voltage
+            name: Grid voltage
+          - entity: sensor.webbox_grid_frequency
+            name: Grid frequency
+          - entity: sensor.webbox_grid_relay
+            name: Grid relay
+          - entity: sensor.webbox_grid_relay_code
+            name: Grid relay code
+          - entity: sensor.webbox_reactive_power
+            name: Reactive power
+          - entity: sensor.webbox_apparent_power
+            name: Apparent power
+          - entity: sensor.webbox_battery_voltage
+            name: Battery voltage
+          - entity: sensor.webbox_battery_soc
+            name: Battery SoC
+          - entity: sensor.webbox_battery_temp
+            name: Battery temp
+          - entity: sensor.webbox_operating_time
+            name: Operating time
+          - entity: sensor.webbox_device_serial
+            name: Device serial
+          - entity: sensor.webbox_device_susy_id
+            name: SuSy ID
+
+      - type: entities
+        title: Gateway (Unit ID 1)
+        show_header_toggle: false
+        entities:
+          - entity: sensor.webbox_modbus_profile
+            name: Modbus profile
+          - entity: sensor.webbox_serial_number
+            name: WebBox serial
+
+      - type: history-graph
+        title: Modbus power / grid (12 h)
+        hours_to_show: 12
+        entities:
+          - entity: sensor.webbox_plant_power
+            name: Plant W
+          - entity: sensor.webbox_device_power_ac
+            name: Device W
+          - entity: sensor.webbox_grid_voltage
+            name: Grid V
 
   - title: Battery
     path: battery

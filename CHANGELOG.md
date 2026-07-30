@@ -2,6 +2,7 @@
 
 ## 2.1.2
 
+- **Feature:** WebBox **Modbus TCP** package (`packages/webbox_modbus.yaml`) — plant + device parameters; dashboards Modbus view
 - **Feature:** WebBox sensors on Pack detail + WebBox plant dashboards (gauges, entities, history)
 - **Feature:** Auto Tessie charge amps from EVTV BMS (`tcch_amps` + cell/SoC safety); helpers package + scripts/automations
 - **Fix:** plant UI WebSocket client expands HA `subscribe_entities` compressed state (`s`/`a`/`+`/`-`) so gauges and KPIs update live

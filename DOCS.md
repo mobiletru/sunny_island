@@ -41,6 +41,30 @@ WebBox is configured on the **Tesla EVTV BMS** integration (not the Sunny Island
 
 Leave the host empty to disable the solar poller. Pack detail + WebBox plant dashboards show these sensors (unavailable until host is set).
 
+## WebBox Modbus TCP
+
+Package: `ha_config/packages/webbox_modbus.yaml` → copy to `/config/packages/`  
+(with `homeassistant.packages: !include_dir_named packages`).
+
+1. Enable Modbus on the WebBox (Interfaces → Modbus)
+2. Add to `/config/secrets.yaml` (see `ha_config/secrets.example.yaml`):
+
+```yaml
+webbox_host: 192.168.x.x
+webbox_password: sma   # optional; for BMS JSON-RPC if enabled
+```
+
+3. Set the same host/password on **Tesla EVTV BMS → Configure** for HTTP `home.ajax` sensors
+4. Restart Core
+
+| Unit ID | Role | Example sensors |
+|---------|------|-----------------|
+| 1 | Gateway | profile, WebBox serial |
+| 2 | Plant | plant power, daily/total yield |
+| 3 | Device (SI) | AC power, grid V/Hz, status, battery V/temp |
+
+Dashboards: **WebBox plant → Modbus** and **Pack detail → Solar & car**.
+
 ## Auto Tessie charge amps (from EVTV BMS)
 
 While the car is charging, automation **Tessie auto amps from EVTV BMS** sets
