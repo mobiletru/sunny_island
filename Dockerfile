@@ -2,7 +2,7 @@ ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.21
 FROM ${BUILD_FROM}
 
 ARG BUILD_ARCH=amd64
-ARG BUILD_VERSION=2.1.2
+ARG BUILD_VERSION=2.1.3
 
 LABEL \
     io.hass.name="Sunny Island" \

@@ -43,8 +43,16 @@ Leave the host empty to disable the solar poller. Pack detail + WebBox plant das
 
 ## WebBox Modbus TCP
 
-Package: `ha_config/packages/webbox_modbus.yaml` → copy to `/config/packages/`  
-(with `homeassistant.packages: !include_dir_named packages`).
+On add-on start, packages are installed into `/config/packages/`:
+- `sunny_island.yaml` — helpers (auto amps, voltage stop)
+- `webbox_modbus.yaml` — Modbus TCP sensors
+
+Ensure `configuration.yaml` includes:
+
+```yaml
+homeassistant:
+  packages: !include_dir_named packages
+```
 
 1. Enable Modbus on the WebBox (Interfaces → Modbus)
 2. Add to `/config/secrets.yaml` (see `ha_config/secrets.example.yaml`):
@@ -55,7 +63,7 @@ webbox_password: sma   # optional; for BMS JSON-RPC if enabled
 ```
 
 3. Set the same host/password on **Tesla EVTV BMS → Configure** for HTTP `home.ajax` sensors
-4. Restart Core
+4. Restart Core after first install
 
 | Unit ID | Role | Example sensors |
 |---------|------|-----------------|

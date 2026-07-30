@@ -29,9 +29,17 @@ SRC_DASH = BUNDLE / "dashboards"
 DST_DASH_DIR = HA_CONFIG / "dashboards" / "sunny_island"
 SRC_EXAMPLES = BUNDLE / "ha_config"
 DST_EXAMPLES = HA_CONFIG / "sunny_island_examples"
+SRC_PACKAGES = BUNDLE / "ha_config" / "packages"
+DST_PACKAGES = HA_CONFIG / "packages"
 SNIPPET_PATH = DST_DASH_DIR / "lovelace_include.yaml"
 README_PATH = DST_DASH_DIR / "README.md"
 ADDON_CONFIG = BUNDLE.parent / "config.yaml"  # /opt/sunny_island/../config.yaml may not exist in image
+
+# App-owned package files always kept in sync with the bundle (content-gated).
+APP_PACKAGE_FILES = (
+    "sunny_island.yaml",
+    "webbox_modbus.yaml",
+)
 
 
 def _app_version() -> str:
@@ -136,11 +144,20 @@ def _copy_tree(src: Path, dst: Path, *, force: bool) -> str:
 def _copy_file(src: Path, dst: Path, *, force: bool) -> str:
     if not src.is_file():
         return f"missing file {src}"
-    if dst.exists() and not force:
-        return f"skipped file (exists): {dst}"
     dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, dst)
-    return f"copied {src.name} → {dst}"
+    new = src.read_bytes()
+    if dst.is_file():
+        if not force and dst.read_bytes() == new:
+            return f"dashboard current: {dst.name}"
+        if not force and dst.read_bytes() != new:
+            # App-owned dashboards: still update when content changed in the bundle
+            dst.write_bytes(new)
+            return f"updated {src.name} → {dst}"
+    else:
+        dst.write_bytes(new)
+        return f"copied {src.name} → {dst}"
+    dst.write_bytes(new)
+    return f"copied {src.name} → {dst} (force)"
 
 
 def _yaml_bool(v: bool) -> str:
@@ -227,6 +244,102 @@ def _install_dashboards(*, force: bool) -> list[str]:
     return actions
 
 
+def _copy_if_changed(src: Path, dst: Path) -> str:
+    """Copy when missing or content differs (app-owned files)."""
+    if not src.is_file():
+        return f"missing file {src}"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    new = src.read_bytes()
+    if dst.is_file() and dst.read_bytes() == new:
+        return f"package current: {dst.name}"
+    dst.write_bytes(new)
+    return f"installed package {src.name} → {dst}"
+
+
+def _install_packages() -> list[str]:
+    """Sync ha_config/packages into /config/packages (WebBox Modbus, helpers)."""
+    actions: list[str] = []
+    if not SRC_PACKAGES.is_dir():
+        actions.append(f"missing packages bundle {SRC_PACKAGES}")
+        return actions
+    DST_PACKAGES.mkdir(parents=True, exist_ok=True)
+    for name in APP_PACKAGE_FILES:
+        src = SRC_PACKAGES / name
+        if src.is_file():
+            actions.append(_copy_if_changed(src, DST_PACKAGES / name))
+    # Any extra package yaml shipped later
+    for src in sorted(SRC_PACKAGES.glob("*.yaml")):
+        if src.name not in APP_PACKAGE_FILES:
+            actions.append(_copy_if_changed(src, DST_PACKAGES / src.name))
+    # Reminder note (never rewrite configuration.yaml)
+    note = DST_PACKAGES / "README_sunny_island.txt"
+    note_body = (
+        "Sunny Island packages (managed by the add-on).\n"
+        "Ensure configuration.yaml has:\n"
+        "  homeassistant:\n"
+        "    packages: !include_dir_named packages\n"
+        "Set secrets.webbox_host (and optional webbox_password) for Modbus/RPC.\n"
+        "See sunny_island_examples/ or ha_config/secrets.example.yaml.\n"
+    )
+    if not note.is_file() or note.read_text(encoding="utf-8") != note_body:
+        note.write_text(note_body, encoding="utf-8")
+        actions.append(f"wrote {note}")
+    return actions
+
+
+def _install_scripts_automations(*, force: bool) -> list[str]:
+    """Install car-charger / protection / auto-amps YAML into /config when empty or force.
+
+    Does not clobber non-empty user scripts/automations unless force_overwrite.
+    """
+    actions: list[str] = []
+    pairs = [
+        (SRC_EXAMPLES / "scripts.car_charger.yaml", "scripts"),
+        (SRC_EXAMPLES / "scripts.tessie_auto_amps.yaml", "scripts"),
+        (SRC_EXAMPLES / "automations.pack_protection.yaml", "automations"),
+        (SRC_EXAMPLES / "automations.tessie_auto_amps.yaml", "automations"),
+    ]
+    script_parts: list[str] = []
+    auto_parts: list[str] = []
+    for src, kind in pairs:
+        if not src.is_file():
+            actions.append(f"missing {src.name}")
+            continue
+        body = src.read_text(encoding="utf-8").rstrip() + "\n"
+        if kind == "scripts":
+            script_parts.append(body)
+        else:
+            auto_parts.append(body)
+
+    scripts_dst = HA_CONFIG / "scripts.yaml"
+    autos_dst = HA_CONFIG / "automations.yaml"
+    merged_scripts = "\n".join(script_parts)
+    merged_autos = "\n".join(auto_parts)
+
+    def _write_merged(dst: Path, content: str, label: str) -> str:
+        if not content.strip():
+            return f"no {label} content"
+        empty = (not dst.is_file()) or (not dst.read_text(encoding="utf-8").strip())
+        if force or empty:
+            dst.write_text(content, encoding="utf-8")
+            return f"wrote {dst} ({label})"
+        # Update if destination is still a previous Sunny Island merge (contains our script ids)
+        cur = dst.read_text(encoding="utf-8")
+        marker = "set_tessie_amps_from_bms" if label == "scripts" else "pack_bms_voltage_stop_tessie"
+        if marker in cur and cur != content:
+            dst.write_text(content, encoding="utf-8")
+            return f"updated app-managed {dst.name}"
+        if marker in cur:
+            return f"{dst.name} already app-managed"
+        return f"skipped {dst.name} (user content present; force_overwrite=false)"
+
+    if script_parts:
+        actions.append(_write_merged(scripts_dst, merged_scripts, "scripts"))
+    if auto_parts:
+        actions.append(_write_merged(autos_dst, merged_autos, "automations"))
+    return actions
+
+
 def main() -> int:
     opts = _load_options()
     auto_sync = bool(opts.get("auto_sync", True))
@@ -263,6 +376,24 @@ def main() -> int:
                 errors.append(f"dashboard sync failed: {exc}")
                 print(f"[sunny_island] ERROR: {errors[-1]}")
 
+        # Packages: WebBox Modbus + helpers (always content-sync into /config/packages)
+        try:
+            for msg in _install_packages():
+                actions.append(msg)
+                print(f"[sunny_island] {msg}")
+        except OSError as exc:
+            errors.append(f"packages sync failed: {exc}")
+            print(f"[sunny_island] ERROR: {errors[-1]}")
+
+        # Scripts + automations (Tessie amps, pack voltage stop) when empty or app-managed
+        try:
+            for msg in _install_scripts_automations(force=force):
+                actions.append(msg)
+                print(f"[sunny_island] {msg}")
+        except OSError as exc:
+            errors.append(f"scripts/automations sync failed: {exc}")
+            print(f"[sunny_island] ERROR: {errors[-1]}")
+
         if SRC_EXAMPLES.is_dir():
             try:
                 # Examples: only install when missing or force (no version gate)
@@ -290,6 +421,12 @@ def main() -> int:
         "synced_at": now,
         "ha_config": str(HA_CONFIG),
         "installed_path": str(DST_CC) if DST_CC.is_dir() else None,
+        "packages": {
+            "dir": str(DST_PACKAGES) if DST_PACKAGES.is_dir() else None,
+            "files": sorted(p.name for p in DST_PACKAGES.glob("*.yaml"))
+            if DST_PACKAGES.is_dir()
+            else [],
+        },
         "dashboards": {
             "dir": str(DST_DASH_DIR) if DST_DASH_DIR.is_dir() else None,
             "snippet": str(SNIPPET_PATH) if SNIPPET_PATH.is_file() else None,
@@ -307,8 +444,10 @@ def main() -> int:
         "ok": not errors and DST_CC.is_dir(),
         "next_steps": [
             "Sidebar Ingress: Sunny Island plant UI",
+            "packages: ensure homeassistant.packages: !include_dir_named packages",
+            "secrets.yaml: webbox_host (+ optional webbox_password)",
             "Merge dashboards/sunny_island/lovelace_include.yaml under lovelace.dashboards if desired",
-            "Settings → Devices & services → Tesla EVTV BMS (if missing)",
+            "Settings → Devices & services → Tesla EVTV BMS (WebBox host/password)",
             "Restart HA Core after first integration install/update",
             "Examples: /config/sunny_island_examples/",
         ],

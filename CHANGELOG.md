@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.1.3
+
+- **Feature:** add-on installer syncs `ha_config/packages` → `/config/packages` (WebBox Modbus + helpers) and app-managed scripts/automations on start
+
 ## 2.1.2
 
 - **Feature:** WebBox **Modbus TCP** package (`packages/webbox_modbus.yaml`) — plant + device parameters; dashboards Modbus view
