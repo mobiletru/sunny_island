@@ -1,5 +1,53 @@
 # Changelog
 
+## 2.2.7
+
+- **One app:** combine dual sidebar entries into a **single Sunny Island** Ingress panel
+  - Lovelace `sunny-island` is **History only** (`show_in_sidebar: false`, retitled)
+  - Installer hides the Lovelace path in user sidebars and drops the legacy root `dashboards/sunny_island.yaml` duplicate
+  - Plant UI footer links to `/sunny-island/overview` for graphs when needed
+
+## 2.2.6
+
+- **Fix Start charging (Tessie):** when car SoC is already at `number.x_charge_limit`, Tesla stays `complete` and ignores start — script now raises limit by +5% (max 100%) before `switch.x_charge` on
+- **Fix:** `script.start_car_charger` mode `restart` (plant UI double-tap no longer “Already running”)
+- **Fix:** cable-not-connected guard, longer wake/retry, clear failure notification if charge does not start
+- **Plant UI:** better start-charge toasts (at-limit, live charge status)
+
+## 2.2.5
+
+- **Fix Start grid:** HA was still running pre-RPC grid control (Modbus 40527 only → fail on SI6048). Integration **1.9.6** reloads SetParameter `GdManStr` path
+- **Fix:** WebBox RPC retries + `Connection: close` (connection-reset under concurrent polls)
+- **Fix:** service / select raise `HomeAssistantError` instead of 500 `RuntimeError`
+- **Fix:** password MD5 test uses real `sma` hash; GetParameter docs note string channel names
+
+## 2.2.4
+
+- **Fix:** grid control writes use WebBox **SetParameter** (`GdManStr`) first — Modbus 40527 is fallback only (illegal address on many SI6048 + WebBox plants)
+- **Fix:** store WebBox password + device key on runtime so parameter writes authenticate
+- **Fix:** select entity available with RPC-only (no longer requires Modbus enabled)
+- **Fix:** Modbus poll no longer overwrites RPC-sourced grid control parameters
+
+## 2.2.3
+
+- **SI parameters:** battery current, discharge limit, reverse feed, feed-in SoC upper/lower, power setpoint mode/timeout
+- **Plant UI:** **SUNNY ISLAND · PARAMETERS** tile section
+- Reactive power scale FIX2 (var)
+
+## 2.2.2
+
+- **Plant UI:** Grid start section — timer, operating status, generator, relay + **Start grid / Automatic / Off** (writes SMA 40527 via `tesla_evtv_bms.set_grid_control`)
+
+## 2.2.0
+
+- **Feature:** WebBox Modbus TCP **proxy** built into Tesla EVTV BMS integration (plant + SI parameters → `sensor.<pack>_webbox_*`)
+- Config: enable Modbus, port 502, unit IDs gateway/plant/device; HTTP + Modbus share one poller
+- Dashboards + plant UI use integration WebBox entities only
+- **Feature:** full Modbus param set on plant UI tiles + metrics (grid V/Hz, SI batt, status, reactive/apparent, serials, profile)
+- Sensors: `webbox_apparent_power`, `webbox_power_kw`; Lovelace Modbus views wired to `sensor.<pack>_webbox_*`
+- **Remove:** legacy `packages/webbox_modbus.yaml` (duplicate HA Modbus poller) and dual HTTP/Modbus dashboard cards
+- **Refactor:** one Lovelace dashboard **Sunny Island** (replaces Pack detail + WebBox plant)
+
 ## 2.1.3
 
 - **Fix:** pack kWh day/hour/week meters — stop rounding every UDP tick (sub-Wh increments were lost; totals worked, period meters stalled)

@@ -36,9 +36,9 @@ README_PATH = DST_DASH_DIR / "README.md"
 ADDON_CONFIG = BUNDLE.parent / "config.yaml"  # /opt/sunny_island/../config.yaml may not exist in image
 
 # App-owned package files always kept in sync with the bundle (content-gated).
+# Helpers package only — WebBox Modbus is in the BMS integration (not HA modbus YAML).
 APP_PACKAGE_FILES = (
     "sunny_island.yaml",
-    "webbox_modbus.yaml",
 )
 
 
@@ -65,20 +65,15 @@ def _app_version() -> str:
     return "0.0.0"
 
 
+# Optional YAML history dashboard — NOT a second sidebar app.
+# The only sidebar entry is the Ingress plant UI (panel_title: Sunny Island).
 LOVELACE_DASHBOARDS = {
-    "sunny-island-pack": {
+    "sunny-island": {
         "mode": "yaml",
-        "filename": "dashboards/sunny_island/sunny_island_detail.yaml",
-        "title": "Pack detail",
-        "icon": "mdi:car-battery",
-        "show_in_sidebar": True,
-    },
-    "sunny-island-webbox": {
-        "mode": "yaml",
-        "filename": "dashboards/sunny_island/ha_webbox_dashboard.yaml",
-        "title": "WebBox plant",
-        "icon": "mdi:solar-panel-large",
-        "show_in_sidebar": True,
+        "filename": "dashboards/sunny_island/sunny_island.yaml",
+        "title": "Sunny Island · History",
+        "icon": "mdi:chart-timeline-variant",
+        "show_in_sidebar": False,
     },
 }
 
@@ -110,8 +105,23 @@ def _manifest_version(path: Path) -> str | None:
         return None
 
 
+def _version_tuple(ver: str | None) -> tuple[int, ...]:
+    """Parse dotted version for comparison; non-numeric parts → 0."""
+    if not ver:
+        return (0,)
+    parts: list[int] = []
+    for token in str(ver).strip().split("."):
+        digits = "".join(c for c in token if c.isdigit())
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts) or (0,)
+
+
 def _should_sync_tree(src: Path, dst: Path, *, force: bool) -> tuple[bool, str]:
-    """Decide whether to replace dst with src. Prefer version-gated upgrades."""
+    """Decide whether to replace dst with src. Prefer version-gated upgrades.
+
+    Never downgrade an installed integration unless force_overwrite is set
+    (local app rebuilds can ship an older image than a manually patched /config).
+    """
     if not src.is_dir():
         return False, f"missing source {src}"
     if force:
@@ -120,10 +130,18 @@ def _should_sync_tree(src: Path, dst: Path, *, force: bool) -> tuple[bool, str]:
         return True, "missing destination"
     src_ver = _manifest_version(src)
     dst_ver = _manifest_version(dst)
-    if src_ver and dst_ver and src_ver != dst_ver:
-        return True, f"version upgrade {dst_ver} → {src_ver}"
     if src_ver and not dst_ver:
         return True, f"missing dest version; install {src_ver}"
+    if src_ver and dst_ver:
+        if _version_tuple(src_ver) > _version_tuple(dst_ver):
+            return True, f"version upgrade {dst_ver} → {src_ver}"
+        if src_ver != dst_ver:
+            return (
+                False,
+                f"skipped (dest {dst_ver} newer/equal than bundle {src_ver}; "
+                f"force_overwrite=false)",
+            )
+        return False, f"skipped (exists, version={dst_ver}, force_overwrite=false)"
     return False, f"skipped (exists, version={dst_ver or 'unknown'}, force_overwrite=false)"
 
 
@@ -189,15 +207,15 @@ def _dashboard_snippet() -> str:
 
 def _dashboard_readme() -> str:
     return (
-        "# Sunny Island Lovelace dashboards\n\n"
-        "YAML dashboards live in this folder. The add-on does **not** rewrite "
-        "`configuration.yaml`.\n\n"
-        "To register sidebars, merge the contents of `lovelace_include.yaml` "
-        "under `lovelace.dashboards` (or open the YAML files via a manual "
-        "dashboard).\n\n"
-        "Files:\n"
-        "- `sunny_island_detail.yaml` — pack detail\n"
-        "- `ha_webbox_dashboard.yaml` — WebBox plant\n"
+        "# Sunny Island — one app\n\n"
+        "**Sidebar:** use the Ingress plant UI only (**Sunny Island** add-on panel).\n\n"
+        "This folder holds an optional **History** Lovelace YAML (graphs / multi-view).\n"
+        "It is **not** shown in the sidebar by default (`show_in_sidebar: false`) so you\n"
+        "do not get two apps with the same name.\n\n"
+        "Open history at `/sunny-island/overview` or via the plant UI footer link.\n\n"
+        "The add-on does **not** rewrite `configuration.yaml`.\n\n"
+        "File:\n"
+        "- `sunny_island.yaml` — pack · WebBox · Enphase · Tessie (history views)\n"
     )
 
 
@@ -231,16 +249,125 @@ def _install_dashboards(*, force: bool) -> list[str]:
     for src in sorted(SRC_DASH.glob("*.yaml")):
         actions.append(_copy_file(src, DST_DASH_DIR / src.name, force=force))
 
-    detail = SRC_DASH / "sunny_island_detail.yaml"
-    if detail.is_file():
-        root_detail = HA_CONFIG / "dashboards" / "sunny_island_detail.yaml"
-        actions.append(_copy_file(detail, root_detail, force=force))
+    # Drop retired dual-dashboard YAML if present from older installs
+    for stale in (
+        DST_DASH_DIR / "sunny_island_detail.yaml",
+        DST_DASH_DIR / "ha_webbox_dashboard.yaml",
+        HA_CONFIG / "dashboards" / "sunny_island_detail.yaml",
+    ):
+        if stale.is_file():
+            try:
+                stale.unlink()
+                actions.append(f"removed stale {stale.name}")
+            except OSError as exc:
+                actions.append(f"could not remove {stale}: {exc}")
+
+    main = SRC_DASH / "sunny_island.yaml"
+    if main.is_file():
+        # Canonical path only: dashboards/sunny_island/sunny_island.yaml
+        # Remove legacy root duplicate so there is one dashboard file.
+        root_main = HA_CONFIG / "dashboards" / "sunny_island.yaml"
+        if root_main.is_file():
+            try:
+                root_main.unlink()
+                actions.append(f"removed legacy duplicate {root_main}")
+            except OSError as exc:
+                actions.append(f"could not remove legacy {root_main}: {exc}")
 
     try:
-        actions.extend(_write_dashboard_helpers(force=force))
+        # Always refresh include snippet (history hidden from sidebar)
+        actions.extend(_write_dashboard_helpers(force=True))
     except OSError as exc:
         actions.append(f"dashboard helpers failed: {exc}")
 
+    try:
+        actions.extend(_unify_ha_sidebar_entry())
+    except OSError as exc:
+        actions.append(f"sidebar unify failed: {exc}")
+
+    return actions
+
+
+def _unify_ha_sidebar_entry() -> list[str]:
+    """Ensure only the Ingress plant UI appears as Sunny Island in the sidebar.
+
+    - Lovelace ``sunny-island``: show_in_sidebar=false, title History
+    - User sidebar: hide ``sunny-island`` panel if still listed
+    """
+    actions: list[str] = []
+    storage = HA_CONFIG / ".storage"
+
+    # 1) Lovelace dashboard registry
+    lovelace_path = storage / "lovelace_dashboards"
+    if lovelace_path.is_file():
+        try:
+            data = json.loads(lovelace_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            actions.append(f"lovelace_dashboards unreadable: {exc}")
+            data = None
+        if isinstance(data, dict):
+            items = (data.get("data") or {}).get("items") or []
+            changed = False
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                if item.get("id") != "sunny-island" and item.get("url_path") != "sunny-island":
+                    continue
+                if item.get("show_in_sidebar") is not False:
+                    item["show_in_sidebar"] = False
+                    changed = True
+                if item.get("title") in (None, "", "Sunny Island"):
+                    item["title"] = "Sunny Island · History"
+                    changed = True
+                if item.get("icon") == "mdi:solar-power-variant":
+                    item["icon"] = "mdi:chart-timeline-variant"
+                    changed = True
+                cfg = LOVELACE_DASHBOARDS.get("sunny-island") or {}
+                if cfg.get("filename") and item.get("filename") != cfg["filename"]:
+                    item["filename"] = cfg["filename"]
+                    changed = True
+            if changed:
+                lovelace_path.write_text(
+                    json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                    encoding="utf-8",
+                )
+                actions.append(
+                    "unified sidebar: lovelace sunny-island → History (hidden)"
+                )
+            else:
+                actions.append("lovelace sunny-island already non-sidebar")
+
+    # 2) Per-user sidebar: hide the lovelace path so only Ingress remains
+    if storage.is_dir():
+        for user_file in storage.glob("frontend.user_data_*"):
+            try:
+                ud = json.loads(user_file.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            sidebar = (ud.get("data") or {}).get("sidebar")
+            if not isinstance(sidebar, dict):
+                continue
+            changed = False
+            hidden = list(sidebar.get("hiddenPanels") or [])
+            if "sunny-island" not in hidden:
+                hidden.append("sunny-island")
+                sidebar["hiddenPanels"] = hidden
+                changed = True
+            for key in ("panelOrder", "order"):
+                order = list(sidebar.get(key) or [])
+                if "sunny-island" in order:
+                    sidebar[key] = [x for x in order if x != "sunny-island"]
+                    changed = True
+            if changed:
+                ud.setdefault("data", {})["sidebar"] = sidebar
+                user_file.write_text(
+                    json.dumps(ud, indent=2, ensure_ascii=False) + "\n",
+                    encoding="utf-8",
+                )
+                actions.append(f"hid sunny-island panel in {user_file.name}")
+
+    if not actions:
+        actions.append("sidebar unify: no HA storage changes needed")
     return actions
 
 
@@ -267,10 +394,6 @@ def _install_packages() -> list[str]:
         src = SRC_PACKAGES / name
         if src.is_file():
             actions.append(_copy_if_changed(src, DST_PACKAGES / name))
-    # Any extra package yaml shipped later
-    for src in sorted(SRC_PACKAGES.glob("*.yaml")):
-        if src.name not in APP_PACKAGE_FILES:
-            actions.append(_copy_if_changed(src, DST_PACKAGES / src.name))
     # Reminder note (never rewrite configuration.yaml)
     note = DST_PACKAGES / "README_sunny_island.txt"
     note_body = (
@@ -278,8 +401,8 @@ def _install_packages() -> list[str]:
         "Ensure configuration.yaml has:\n"
         "  homeassistant:\n"
         "    packages: !include_dir_named packages\n"
-        "Set secrets.webbox_host (and optional webbox_password) for Modbus/RPC.\n"
-        "See sunny_island_examples/ or ha_config/secrets.example.yaml.\n"
+        "WebBox HTTP + Modbus: Tesla EVTV BMS → Configure (host + Enable Modbus TCP).\n"
+        "Entities: sensor.<pack_prefix>_webbox_*\n"
     )
     if not note.is_file() or note.read_text(encoding="utf-8") != note_body:
         note.write_text(note_body, encoding="utf-8")
@@ -434,7 +557,11 @@ def main() -> int:
             "files": sorted(p.name for p in DST_DASH_DIR.glob("*.yaml"))
             if DST_DASH_DIR.is_dir()
             else [],
-            "note": "configuration.yaml is never rewritten; merge lovelace_include.yaml manually",
+            "note": (
+                "One app: sidebar = Ingress plant UI only. "
+                "Lovelace sunny-island is History (show_in_sidebar false)."
+            ),
+            "sidebar": "local_sunny_island (Ingress) — sole Sunny Island entry",
         },
         "auto_sync": auto_sync,
         "install_dashboard": install_dashboard,
@@ -445,9 +572,8 @@ def main() -> int:
         "next_steps": [
             "Sidebar Ingress: Sunny Island plant UI",
             "packages: ensure homeassistant.packages: !include_dir_named packages",
-            "secrets.yaml: webbox_host (+ optional webbox_password)",
             "Merge dashboards/sunny_island/lovelace_include.yaml under lovelace.dashboards if desired",
-            "Settings → Devices & services → Tesla EVTV BMS (WebBox host/password)",
+            "Settings → Devices & services → Tesla EVTV BMS → Configure (WebBox host + Modbus)",
             "Restart HA Core after first integration install/update",
             "Examples: /config/sunny_island_examples/",
         ],

@@ -1,0 +1,33 @@
+set_grid_control:
+  name: Set WebBox grid control
+  description: >
+    Write Sunny Island grid-start parameter via WebBox JSON-RPC SetParameter
+    (channel GdManStr: Start | Auto | Stop). Falls back to Modbus register
+    40527 when RPC is unavailable. Modes: off, manual_on (request grid),
+    automatic. Requires WebBox password (plain text, e.g. sma) in the
+    integration Configure dialog — MD5 is applied automatically for RPC.
+  fields:
+    mode:
+      name: Mode
+      description: "off | manual_on | automatic (aliases start, on, auto, Stop, Start, Auto)"
+      required: true
+      example: "manual_on"
+      selector:
+        select:
+          options:
+            - "off"
+            - "manual_on"
+            - "automatic"
+    entity_prefix:
+      name: Entity prefix
+      description: Optional pack prefix (default battery_storage_tesla_pack)
+      required: false
+      example: battery_storage_tesla_pack
+      selector:
+        text:
+    name:
+      name: Pack name
+      description: Optional config entry name filter (lowercased)
+      required: false
+      selector:
+        text:

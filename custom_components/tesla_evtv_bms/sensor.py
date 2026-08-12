@@ -84,8 +84,46 @@ SENSOR_TYPES = {
     "total_cells": "",
     "summary": "",
     "webbox_power": "W",
+    "webbox_power_kw": "kW",
     "webbox_daily_yield": "kWh",
     "webbox_total_yield": "kWh",
+    "webbox_device_power": "W",
+    "webbox_grid_voltage": "V",
+    "webbox_grid_frequency": "Hz",
+    "webbox_reactive_power": "var",
+    "webbox_apparent_power": "VA",
+    "webbox_status_code": "",
+    "webbox_status": "",
+    "webbox_grid_relay_code": "",
+    "webbox_grid_relay": "",
+    "webbox_grid_connection_time": "s",
+    "webbox_operating_status_code": "",
+    "webbox_operating_status": "",
+    "webbox_generator_status_code": "",
+    "webbox_generator_status": "",
+    "webbox_grid_control_code": "",
+    "webbox_grid_control": "",
+    "webbox_battery_voltage": "V",
+    "webbox_battery_soc": "%",
+    "webbox_battery_temp": "°C",
+    "webbox_battery_current": "A",
+    "webbox_discharge_limit": "%",
+    "webbox_reverse_feed_code": "",
+    "webbox_reverse_feed": "",
+    "webbox_feed_soc_upper": "%",
+    "webbox_feed_soc_lower": "%",
+    "webbox_power_setpoint_timeout": "s",
+    "webbox_power_setpoint_mode_code": "",
+    "webbox_power_setpoint_mode": "",
+    "webbox_operating_time": "s",
+    "webbox_serial": "",
+    "webbox_device_serial": "",
+    "webbox_modbus_profile": "",
+    "webbox_device_susy_id": "",
+    "webbox_rpc_status": "",
+    "webbox_device_key": "",
+    "webbox_charge_mode": "",
+    "webbox_fault_text": "",
 }
 
 ICON_MAP = {
@@ -137,8 +175,46 @@ ICON_MAP = {
     "total_cells": "mdi:checkbox-multiple-marked-circle",
     "summary": "mdi:clock-outline",
     "webbox_power": "mdi:solar-power",
+    "webbox_power_kw": "mdi:solar-power",
     "webbox_daily_yield": "mdi:weather-sunny",
     "webbox_total_yield": "mdi:chart-areaspline",
+    "webbox_device_power": "mdi:solar-power-variant",
+    "webbox_grid_voltage": "mdi:sine-wave",
+    "webbox_grid_frequency": "mdi:sine-wave",
+    "webbox_reactive_power": "mdi:flash-outline",
+    "webbox_apparent_power": "mdi:flash-triangle-outline",
+    "webbox_status_code": "mdi:numeric",
+    "webbox_status": "mdi:information-outline",
+    "webbox_grid_relay_code": "mdi:numeric",
+    "webbox_grid_relay": "mdi:electric-switch",
+    "webbox_grid_connection_time": "mdi:timer-sand",
+    "webbox_operating_status_code": "mdi:numeric",
+    "webbox_operating_status": "mdi:transmission-tower",
+    "webbox_generator_status_code": "mdi:numeric",
+    "webbox_generator_status": "mdi:engine",
+    "webbox_grid_control_code": "mdi:numeric",
+    "webbox_grid_control": "mdi:transmission-tower-export",
+    "webbox_battery_voltage": "mdi:car-battery",
+    "webbox_battery_soc": "mdi:battery",
+    "webbox_battery_temp": "mdi:thermometer",
+    "webbox_battery_current": "mdi:current-dc",
+    "webbox_discharge_limit": "mdi:battery-arrow-down",
+    "webbox_reverse_feed_code": "mdi:numeric",
+    "webbox_reverse_feed": "mdi:transmission-tower-export",
+    "webbox_feed_soc_upper": "mdi:battery-high",
+    "webbox_feed_soc_lower": "mdi:battery-low",
+    "webbox_power_setpoint_timeout": "mdi:timer-outline",
+    "webbox_power_setpoint_mode_code": "mdi:numeric",
+    "webbox_power_setpoint_mode": "mdi:tune",
+    "webbox_operating_time": "mdi:timer-outline",
+    "webbox_serial": "mdi:barcode",
+    "webbox_device_serial": "mdi:barcode",
+    "webbox_modbus_profile": "mdi:lan",
+    "webbox_device_susy_id": "mdi:identifier",
+    "webbox_rpc_status": "mdi:api",
+    "webbox_device_key": "mdi:identifier",
+    "webbox_charge_mode": "mdi:battery-charging",
+    "webbox_fault_text": "mdi:alert",
 }
 
 WEBBOX_KEY_PREFIXES = ("webbox_",)
@@ -146,6 +222,8 @@ WEBBOX_KEY_PREFIXES = ("webbox_",)
 _VOLTAGE_KEYS = frozenset(
     {
         "volts",
+        "webbox_grid_voltage",
+        "webbox_battery_voltage",
         "lowest_cell",
         "highest_cell",
         "average_cell",
@@ -164,12 +242,31 @@ _POWER_KEYS = frozenset(
         "power_average",
         "power_hourly_average",
         "webbox_power",
+        "webbox_power_kw",
+        "webbox_device_power",
     }
 )
-_CURRENT_KEYS = frozenset({"current", "tcch_amps"})
-_TEMP_KEYS = frozenset({"lowest_temp", "highest_temp"})
+_REACTIVE_POWER_KEYS = frozenset({"webbox_reactive_power"})
+_APPARENT_POWER_KEYS = frozenset({"webbox_apparent_power"})
+_FREQUENCY_KEYS = frozenset({"webbox_grid_frequency"})
+_DURATION_KEYS = frozenset({"webbox_operating_time"})  # cumulative
+_COUNTDOWN_KEYS = frozenset(
+    {"webbox_grid_connection_time", "webbox_power_setpoint_timeout"}
+)
+_BATTERY_KEYS = frozenset({"state_of_charge", "webbox_battery_soc"})
+_CURRENT_KEYS = frozenset({"current", "tcch_amps", "webbox_battery_current"})
+_TEMP_KEYS = frozenset({"lowest_temp", "highest_temp", "webbox_battery_temp"})
+_PERCENT_SI_KEYS = frozenset(
+    {
+        "webbox_discharge_limit",
+        "webbox_feed_soc_upper",
+        "webbox_feed_soc_lower",
+    }
+)
 _ENERGY_TOTAL_KEYS = frozenset(
     {
+        "webbox_daily_yield",
+        "webbox_total_yield",
         "charge_energy",
         "discharge_energy",
         "charge_energy_hour",
@@ -209,13 +306,19 @@ _FAST_COOLDOWN_KEYS = frozenset(
 )
 _MEASUREMENT_KEYS = (
     _POWER_KEYS
+    | _REACTIVE_POWER_KEYS
+    | _APPARENT_POWER_KEYS
+    | _FREQUENCY_KEYS
+    | _DURATION_KEYS
+    | _COUNTDOWN_KEYS
     | _VOLTAGE_KEYS
     | _CURRENT_KEYS
     | _TEMP_KEYS
     | _CELL_MV_KEYS
+    | _BATTERY_KEYS
+    | _PERCENT_SI_KEYS
     | frozenset(
         {
-            "state_of_charge",
             "power_average",
             "power_hourly_average",
             "hours_to_empty",
@@ -268,13 +371,21 @@ def sensor_device_class(key: str):
         return SensorDeviceClass.ENERGY
     if key in _POWER_KEYS:
         return SensorDeviceClass.POWER
+    if key in _REACTIVE_POWER_KEYS:
+        return SensorDeviceClass.REACTIVE_POWER
+    if key in _APPARENT_POWER_KEYS:
+        return SensorDeviceClass.APPARENT_POWER
+    if key in _FREQUENCY_KEYS:
+        return SensorDeviceClass.FREQUENCY
+    if key in _DURATION_KEYS or key in _COUNTDOWN_KEYS:
+        return SensorDeviceClass.DURATION
     if key in _VOLTAGE_KEYS:
         return SensorDeviceClass.VOLTAGE
     if key in _CURRENT_KEYS:
         return SensorDeviceClass.CURRENT
     if key in _TEMP_KEYS:
         return SensorDeviceClass.TEMPERATURE
-    if key == "state_of_charge":
+    if key in _BATTERY_KEYS:
         return SensorDeviceClass.BATTERY
     return None
 
@@ -284,6 +395,10 @@ def sensor_state_class(key: str):
         return SensorStateClass.MEASUREMENT
     if key in _ENERGY_TOTAL_KEYS or key.endswith("_energy") or "_energy_" in key:
         return SensorStateClass.TOTAL_INCREASING
+    if key in _DURATION_KEYS:
+        return SensorStateClass.TOTAL_INCREASING
+    if key in _COUNTDOWN_KEYS:
+        return SensorStateClass.MEASUREMENT
     if key in _MEASUREMENT_KEYS:
         return SensorStateClass.MEASUREMENT
     return None
@@ -294,10 +409,22 @@ def sensor_display_precision(key: str) -> int | None:
         return 3
     if key in _ENERGY_TOTAL_KEYS or key == "available_energy":
         return 3
-    if key in ("volts", "freq_shift_volts", "high_voltage_cutoff", "low_voltage_cutoff"):
+    if key == "webbox_power_kw":
+        return 3
+    if key in (
+        "volts",
+        "freq_shift_volts",
+        "high_voltage_cutoff",
+        "low_voltage_cutoff",
+        "webbox_grid_voltage",
+        "webbox_grid_frequency",
+        "webbox_battery_voltage",
+    ):
         return 2
     if key in _CURRENT_KEYS:
         return 2
+    if key == "webbox_battery_temp":
+        return 1
     return None
 
 
@@ -383,6 +510,9 @@ async def async_setup_entry(
 
         now = time.monotonic()
         for key, entity in list(runtime.entities.items()):
+            # Skip non-sensor platforms (e.g. select) stored on the same runtime bag
+            if not isinstance(entity, TeslaEvtvSensor):
+                continue
             if getattr(entity, "hass", None) is None:
                 continue
             new_val = runtime.values.get(key)

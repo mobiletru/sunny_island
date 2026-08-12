@@ -74,15 +74,18 @@ start_car_charger:
   icon: mdi:ev-station
   description: >
     Start Tesla charging via Tessie (switch.x_charge → start_charging).
-    Blocked if pack lowest cell ≤ 3.2 V or SoC ≤ 15%. Wakes car, sets charge
-    amps from EVTV BMS (TCCH + safety via script.set_tessie_amps_from_bms),
-    notifies Companion (Plaid).
-  mode: single
+    Blocked if pack below protection thresholds. If car SoC is already at the
+    charge limit, raises limit by +5% (cap 100%) so Tesla will accept charge.
+    Wakes car, sets amps from EVTV BMS (TCCH + safety), notifies Companion.
+  # restart: plant UI double-tap must not fail with "Already running"
+  mode: restart
   sequence:
     - variables:
         pack_s: "{{ states('sensor.battery_storage_tesla_pack_volts') }}"
         cell_s: "{{ states('sensor.battery_storage_tesla_pack_lowest_cell') }}"
         soc_s: "{{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}"
+        batt_s: "{{ states('sensor.x_battery_level') }}"
+        limit_s: "{{ states('number.x_charge_limit') }}"
         blocked: >-
           {% set bad = ['unavailable', 'unknown', 'none', ''] %}
           {% set pack = pack_s | float(99) if pack_s not in bad else 99 %}
@@ -96,6 +99,18 @@ start_car_charger:
           {{ (use_pack and pack <= stop_pack)
              or (use_cell and cell <= stop_cell)
              or (soc <= stop_soc) }}
+        at_limit: >-
+          {% set bad = ['unavailable', 'unknown', 'none', ''] %}
+          {% set batt = batt_s | float(-1) if batt_s not in bad else -1 %}
+          {% set lim = limit_s | float(100) if limit_s not in bad else 100 %}
+          {{ batt >= 0 and batt >= (lim - 0.5) }}
+        new_limit: >-
+          {% set bad = ['unavailable', 'unknown', 'none', ''] %}
+          {% set batt = batt_s | float(0) if batt_s not in bad else 0 %}
+          {% set lim = limit_s | float(80) if limit_s not in bad else 80 %}
+          {# Bump at least +5% above battery so Tesla leaves "complete" #}
+          {% set want = [lim, (batt | round(0, 'ceil') | int) + 5] | max %}
+          {{ [want | int, 100] | min }}
     - if:
         - condition: template
           value_template: "{{ blocked | bool }}"
@@ -117,13 +132,59 @@ start_car_charger:
               — will not start Tessie charge.
             notification_id: car_charger_start_blocked
         - stop: Pack below protection threshold
-    # Safe to start
+    - if:
+        - condition: state
+          entity_id: binary_sensor.x_charge_cable
+          state: "off"
+      then:
+        - action: script.notify_iphone
+          data:
+            title: "Start charging blocked"
+            message: Charge cable not connected (binary_sensor.x_charge_cable is off).
+        - action: persistent_notification.create
+          data:
+            title: Start charging blocked
+            message: Plug in the charge cable, then try Start charging again.
+            notification_id: car_charger_start_blocked
+        - stop: Charge cable not connected
+    # Safe to start — wake car (retry until online or timeout)
     - continue_on_error: true
       action: button.press
       target:
         entity_id: button.x_wake
     - delay:
-        seconds: 3
+        seconds: 4
+    - if:
+        - condition: state
+          entity_id: binary_sensor.x_status
+          state: "off"
+      then:
+        - continue_on_error: true
+          action: button.press
+          target:
+            entity_id: button.x_wake
+        - delay:
+            seconds: 6
+    # At charge limit Tesla stays "complete" and rejects start — raise limit first
+    - if:
+        - condition: template
+          value_template: "{{ at_limit | bool }}"
+      then:
+        - continue_on_error: true
+          action: number.set_value
+          target:
+            entity_id: number.x_charge_limit
+          data:
+            value: "{{ new_limit | int }}"
+        - action: logbook.log
+          data:
+            name: Car charger (Tessie)
+            message: >-
+              Charge limit raised {{ limit_s }}% → {{ new_limit }}%
+              (battery {{ batt_s }}% was at/above limit — Tesla would stay complete)
+            entity_id: number.x_charge_limit
+        - delay:
+            seconds: 2
     # Amps from EVTV BMS (TCCH + safety); fallback floor if auto script leaves 0
     - action: script.set_tessie_amps_from_bms
       continue_on_error: true
@@ -139,14 +200,31 @@ start_car_charger:
             entity_id: number.x_charge_current
           data:
             value: 8
-    - action: switch.turn_on
+    - continue_on_error: true
+      action: switch.turn_on
       target:
         entity_id: switch.x_charge
     - action: input_boolean.turn_on
       target:
         entity_id: input_boolean.car_charger
+    # Re-apply amps after start (Tessie sometimes zeros current when waking)
+    - action: script.set_tessie_amps_from_bms
+      continue_on_error: true
+    - if:
+        - condition: template
+          value_template: >-
+            {% set a = states('number.x_charge_current') | float(0) %}
+            {{ a < 1 }}
+      then:
+        - continue_on_error: true
+          action: number.set_value
+          target:
+            entity_id: number.x_charge_current
+          data:
+            value: 8
     - delay:
-        seconds: 5
+        seconds: 6
+    # Retry wake+start if switch still off (asleep / Tessie lag)
     - if:
         - condition: state
           entity_id: switch.x_charge
@@ -157,10 +235,29 @@ start_car_charger:
           target:
             entity_id: button.x_wake
         - delay:
-            seconds: 2
-        - action: switch.turn_on
+            seconds: 4
+        - continue_on_error: true
+          action: number.set_value
+          target:
+            entity_id: number.x_charge_current
+          data:
+            value: >-
+              {% set a = states('number.x_charge_current') | float(0) %}
+              {{ 8 if a < 1 else a | int }}
+        - continue_on_error: true
+          action: switch.turn_on
           target:
             entity_id: switch.x_charge
+        - delay:
+            seconds: 4
+    - variables:
+        charge_ok: >-
+          {{ is_state('switch.x_charge', 'on')
+             or is_state('sensor.x_charging', 'charging')
+             or is_state('sensor.x_charging', 'starting') }}
+        still_complete: >-
+          {{ is_state('sensor.x_charging', 'complete')
+             and not is_state('switch.x_charge', 'on') }}
     - action: logbook.log
       data:
         name: Car charger (Tessie)
@@ -168,17 +265,48 @@ start_car_charger:
           Tessie start_charging — charge={{ states('sensor.x_charging') }},
           switch={{ states('switch.x_charge') }},
           amps={{ states('number.x_charge_current') }},
+          limit={{ states('number.x_charge_limit') }}%,
+          car SoC={{ states('sensor.x_battery_level') }}%,
           cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V,
-          SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%
+          pack SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%
         entity_id: switch.x_charge
-    - action: script.notify_iphone
-      data:
-        title: "Car charging started (Tessie)"
-        message: >-
-          Pack cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V ·
-          SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}% ·
-          amps={{ states('number.x_charge_current') }} ·
-          charge={{ states('sensor.x_charging') }}.
+    - if:
+        - condition: template
+          value_template: "{{ charge_ok | bool }}"
+      then:
+        - action: script.notify_iphone
+          data:
+            title: "Car charging started (Tessie)"
+            message: >-
+              charge={{ states('sensor.x_charging') }} ·
+              amps={{ states('number.x_charge_current') }} ·
+              limit={{ states('number.x_charge_limit') }}% ·
+              car {{ states('sensor.x_battery_level') }}% ·
+              pack cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V.
+      else:
+        - action: script.notify_iphone
+          data:
+            title: "Car charging did not start"
+            message: >-
+              switch={{ states('switch.x_charge') }} ·
+              charge={{ states('sensor.x_charging') }} ·
+              limit={{ states('number.x_charge_limit') }}% ·
+              car {{ states('sensor.x_battery_level') }}% ·
+              cable={{ states('binary_sensor.x_charge_cable') }}.
+              {% if still_complete | bool %}
+              Still complete — raise charge limit above car SoC and retry.
+              {% else %}
+              Check cable / EVSE / Tessie, then retry Start charging.
+              {% endif %}
+        - action: persistent_notification.create
+          data:
+            title: Car charging did not start
+            message: >-
+              switch={{ states('switch.x_charge') }},
+              charge={{ states('sensor.x_charging') }},
+              limit={{ states('number.x_charge_limit') }}%,
+              car={{ states('sensor.x_battery_level') }}%.
+            notification_id: car_charger_start_failed
 
 notify_iphone:
   alias: Notify iPhone (OS top banner)
@@ -220,8 +348,8 @@ notify_iphone:
           priority: high
           channel: alarm
           importance: high
-          url: /lovelace-sunny-island-detail/overview
-          clickAction: /lovelace-sunny-island-detail/overview
+          url: /sunny-island/overview
+          clickAction: /sunny-island/overview
           tag: pack_protection
           sticky: true
           presentation_options:

@@ -48,6 +48,8 @@ class PackRuntime:
     socket: Any = None
     loop: Any = None
     rolling: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # WebBox Modbus write target (filled when poller starts)
+    webbox: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_entry_data(cls, data: dict) -> PackRuntime:

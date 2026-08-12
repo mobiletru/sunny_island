@@ -65,10 +65,109 @@ const METRICS = {
   loadKw: { entity: `${ENVOY_PREFIX}_current_power_consumption`, label: 'Home Load', format: 'power_kw', group: 'solar' },
   netKw: { entity: `${ENVOY_PREFIX}_current_net_power_consumption`, label: 'Net Grid', format: 'power_kw', group: 'solar' },
   solarToday: { entity: `${ENVOY_PREFIX}_energy_production_today`, label: 'Solar Today', format: 'energy', group: 'solar' },
-  webboxPower: { entity: pack('webbox_power'), label: 'WebBox Power', format: 'power', group: 'webbox' },
-  webboxDay: { entity: pack('webbox_daily_yield'), label: 'WebBox Today', format: 'energy', group: 'webbox' },
-  webboxTotal: { entity: pack('webbox_total_yield'), label: 'WebBox Lifetime', format: 'energy', group: 'webbox' },
+  // SMA Sunny WebBox — HTTP overview + Modbus TCP proxy (unit 1 gateway · 2 plant · 3 SI)
+  webboxPower: { entity: pack('webbox_power'), label: 'Plant Power', format: 'power', group: 'webbox' },
+  webboxPowerKw: { entity: pack('webbox_power_kw'), label: 'Plant Power kW', format: 'power_kw', group: 'webbox' },
+  webboxDay: { entity: pack('webbox_daily_yield'), label: 'Daily Yield', format: 'energy', group: 'webbox' },
+  webboxTotal: { entity: pack('webbox_total_yield'), label: 'Total Yield', format: 'energy', group: 'webbox' },
+  webboxDevicePower: { entity: pack('webbox_device_power'), label: 'Device Power AC', format: 'power', group: 'webbox' },
+  webboxGridV: { entity: pack('webbox_grid_voltage'), label: 'Grid Voltage', format: 'volts', group: 'webbox' },
+  webboxGridHz: { entity: pack('webbox_grid_frequency'), label: 'Grid Frequency', format: 'hz', group: 'webbox' },
+  webboxReactive: { entity: pack('webbox_reactive_power'), label: 'Reactive Power', format: 'var', group: 'webbox' },
+  webboxStatus: { entity: pack('webbox_status'), label: 'Device Status', format: 'text', group: 'webbox' },
+  webboxStatusCode: { entity: pack('webbox_status_code'), label: 'Status Code', format: 'int', group: 'webbox' },
+  webboxRelay: { entity: pack('webbox_grid_relay'), label: 'Grid Relay', format: 'text', group: 'webbox' },
+  webboxRelayCode: { entity: pack('webbox_grid_relay_code'), label: 'Grid Relay Code', format: 'int', group: 'webbox' },
+  // Grid start / connection (Modbus 30199 · 33003 · 30917 · 40527)
+  webboxGridConnTime: {
+    entity: pack('webbox_grid_connection_time'),
+    label: 'Grid start timer',
+    format: 'duration_s',
+    group: 'grid',
+  },
+  webboxOpStatus: {
+    entity: pack('webbox_operating_status'),
+    label: 'Operating status',
+    format: 'text',
+    group: 'grid',
+  },
+  webboxOpStatusCode: {
+    entity: pack('webbox_operating_status_code'),
+    label: 'Operating status code',
+    format: 'int',
+    group: 'grid',
+  },
+  webboxGenStatus: {
+    entity: pack('webbox_generator_status'),
+    label: 'Generator status',
+    format: 'text',
+    group: 'grid',
+  },
+  webboxGridControl: {
+    entity: pack('webbox_grid_control'),
+    label: 'Grid control mode',
+    format: 'text',
+    group: 'grid',
+  },
+  webboxGridControlCode: {
+    entity: pack('webbox_grid_control_code'),
+    label: 'Grid control code',
+    format: 'int',
+    group: 'grid',
+  },
+  webboxBattV: { entity: pack('webbox_battery_voltage'), label: 'SI Battery V', format: 'volts', group: 'webbox' },
+  webboxBattSoc: { entity: pack('webbox_battery_soc'), label: 'SI Battery SoC', format: 'percent', group: 'webbox' },
+  webboxBattTemp: { entity: pack('webbox_battery_temp'), label: 'SI Battery Temp', format: 'temp', group: 'webbox' },
+  webboxBattA: { entity: pack('webbox_battery_current'), label: 'SI Battery A', format: 'amps', group: 'webbox' },
+  webboxOpTime: { entity: pack('webbox_operating_time'), label: 'Operating Time', format: 'duration_s', group: 'webbox' },
+  webboxSerial: { entity: pack('webbox_serial'), label: 'WebBox Serial', format: 'text', group: 'webbox' },
+  webboxDeviceSerial: { entity: pack('webbox_device_serial'), label: 'Device Serial', format: 'text', group: 'webbox' },
+  webboxProfile: { entity: pack('webbox_modbus_profile'), label: 'Modbus Profile', format: 'int', group: 'webbox' },
+  webboxSusyId: { entity: pack('webbox_device_susy_id'), label: 'Device SuSy ID', format: 'int', group: 'webbox' },
+  // Sunny Island parameters (limits / feed-in / setpoint mode)
+  webboxDischargeLimit: {
+    entity: pack('webbox_discharge_limit'),
+    label: 'Discharge limit (self-cons)',
+    format: 'percent',
+    group: 'si',
+  },
+  webboxReverseFeed: {
+    entity: pack('webbox_reverse_feed'),
+    label: 'Reverse feed permitted',
+    format: 'text',
+    group: 'si',
+  },
+  webboxFeedSocUpper: {
+    entity: pack('webbox_feed_soc_upper'),
+    label: 'Feed-in SoC upper',
+    format: 'percent',
+    group: 'si',
+  },
+  webboxFeedSocLower: {
+    entity: pack('webbox_feed_soc_lower'),
+    label: 'Feed-in SoC lower',
+    format: 'percent',
+    group: 'si',
+  },
+  webboxPowerSpMode: {
+    entity: pack('webbox_power_setpoint_mode'),
+    label: 'Power setpoint mode',
+    format: 'text',
+    group: 'si',
+  },
+  webboxPowerSpTimeout: {
+    entity: pack('webbox_power_setpoint_timeout'),
+    label: 'Power setpoint timeout',
+    format: 'duration_s',
+    group: 'si',
+  },
+  webboxApparent: { entity: pack('webbox_apparent_power'), label: 'Apparent Power', format: 'power', group: 'webbox' },
 };
+
+/** Select entity that writes SMA 40527 (Off / Manual On / Automatic). */
+function gridControlSelectId() {
+  return `select.${PACK_PREFIX}_webbox_grid_control`;
+}
 
 const GROUPS = [
   { id: 'pack', title: 'Pack' },
@@ -77,9 +176,13 @@ const GROUPS = [
   { id: 'safety', title: 'Safety & car charger' },
   { id: 'energy', title: 'Pack kWh meters' },
   { id: 'solar', title: 'Enphase site' },
-  { id: 'webbox', title: 'SMA WebBox' },
+  { id: 'webbox', title: 'SMA WebBox Modbus (plant + SI)' },
+  { id: 'grid', title: 'Grid start (WebBox)' },
+  { id: 'si', title: 'Sunny Island parameters' },
 ];
 
 function getAllEntityIds() {
-  return [...new Set(Object.values(METRICS).map((m) => m.entity))];
+  const ids = Object.values(METRICS).map((m) => m.entity);
+  ids.push(gridControlSelectId());
+  return [...new Set(ids)];
 }

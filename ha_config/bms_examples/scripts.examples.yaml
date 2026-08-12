@@ -249,8 +249,8 @@ notify_iphone:
           importance: high
           tag: "{{ notify_tag }}"
           group: "{{ notify_tag }}"
-          url: /lovelace-sunny-island-detail/overview
-          clickAction: /lovelace-sunny-island-detail/overview
+          url: /sunny-island/overview
+          clickAction: /sunny-island/overview
           presentation_options:
             - alert
             - sound

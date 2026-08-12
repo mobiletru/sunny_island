@@ -20,6 +20,7 @@
     bindAuth();
     bindSettings();
     bindChargerButtons();
+    bindGridStartButtons();
     tryConnect();
   }
 
@@ -72,18 +73,66 @@
   }
 
   function bindChargerButtons() {
+    let chargerBusy = false;
     const start = async () => {
-      if (!client) return;
+      if (!client) {
+        toast('Connect to Home Assistant first', 'error');
+        return;
+      }
+      if (chargerBusy) {
+        toast('Start charging already running…', 'info');
+        return;
+      }
+      chargerBusy = true;
       try {
+        // Pre-check: at charge limit Tesla stays "complete" and will not draw
+        const batt = parseFloat(client.getState('sensor.x_battery_level')?.state);
+        const lim = parseFloat(client.getState('number.x_charge_limit')?.state);
+        if (Number.isFinite(batt) && Number.isFinite(lim) && batt >= lim - 0.5) {
+          toast(
+            `Car at charge limit (${batt}% / ${lim}%) — raising limit then starting…`,
+            'info'
+          );
+        } else {
+          toast('Starting charge (Tessie)…', 'info');
+        }
         await client.callService('script', 'start_car_charger');
-        toast('Start charging (Tessie) requested', 'success');
+        // Brief settle then report live status
+        await new Promise((r) => setTimeout(r, 1500));
+        const st = (client.getState('sensor.x_charging')?.state || '').toLowerCase();
+        const sw = (client.getState('switch.x_charge')?.state || '').toLowerCase();
+        const amps = client.getState('number.x_charge_current')?.state;
+        if (sw === 'on' || st === 'charging' || st === 'starting') {
+          toast(`Charging · ${st || sw}${amps != null ? ` · ${amps} A` : ''}`, 'success');
+        } else if (st === 'complete') {
+          toast(
+            'Still complete — raise charge limit above car SoC and retry',
+            'error'
+          );
+        } else {
+          toast(
+            `Start sent · charge=${st || 'unknown'} switch=${sw || 'unknown'}`,
+            'info'
+          );
+        }
       } catch (err) {
-        toast(err.message || 'Start charging failed', 'error');
+        const msg = err.message || 'Start charging failed';
+        if (/already running/i.test(msg)) {
+          toast('Start charging already running…', 'info');
+        } else {
+          toast(msg, 'error');
+        }
+      } finally {
+        chargerBusy = false;
       }
     };
     const stop = async () => {
-      if (!client) return;
+      if (!client) {
+        toast('Connect to Home Assistant first', 'error');
+        return;
+      }
       try {
+        toast('Stopping charge (Tessie)…', 'info');
         await client.callService('script', 'shutdown_car_charger');
         toast('Stop charging (Tessie) requested', 'success');
       } catch (err) {
@@ -94,6 +143,71 @@
     $('#shutdown-charger-btn')?.addEventListener('click', stop);
     $('#start-charger-main')?.addEventListener('click', start);
     $('#stop-charger-main')?.addEventListener('click', stop);
+  }
+
+  /** WebBox SMA reg 40527 — manual grid request / automatic / off */
+  function bindGridStartButtons() {
+    const labels = {
+      manual_on: 'Start grid (manual request)',
+      automatic: 'Grid control → Automatic',
+      off: 'Grid control → Off',
+    };
+    const setMode = async (mode) => {
+      if (!client) {
+        toast('Connect to Home Assistant first', 'error');
+        return;
+      }
+      try {
+        await client.callService('tesla_evtv_bms', 'set_grid_control', {
+          mode,
+          entity_prefix: typeof PACK_PREFIX === 'string' ? PACK_PREFIX : undefined,
+        });
+        toast(labels[mode] || `Grid control → ${mode}`, 'success');
+      } catch (err) {
+        // Fallback: select.select_option with friendly labels
+        try {
+          const optionMap = {
+            manual_on: 'Manual On (request grid)',
+            automatic: 'Automatic',
+            off: 'Off',
+          };
+          const entityId =
+            typeof gridControlSelectId === 'function'
+              ? gridControlSelectId()
+              : `select.${PACK_PREFIX}_webbox_grid_control`;
+          await client.callService(
+            'select',
+            'select_option',
+            { option: optionMap[mode] || mode },
+            { entity_id: entityId }
+          );
+          toast(labels[mode] || `Grid control → ${mode}`, 'success');
+        } catch (err2) {
+          toast(err2.message || err.message || 'Grid control failed', 'error');
+        }
+      }
+    };
+    document.querySelectorAll('[data-grid-mode]').forEach((btn) => {
+      btn.addEventListener('click', () => setMode(btn.dataset.gridMode));
+    });
+  }
+
+  function updateGridStartButtons() {
+    if (!client) return;
+    const selectId =
+      typeof gridControlSelectId === 'function'
+        ? gridControlSelectId()
+        : `select.${PACK_PREFIX}_webbox_grid_control`;
+    const st = client.getState(selectId);
+    const sensorMode = client.getState(METRICS.webboxGridControl?.entity)?.state || '';
+    const raw = (st?.state || sensorMode || '').toLowerCase();
+    let mode = '';
+    if (raw.includes('manual') || raw === 'on' || raw.includes('request')) mode = 'manual_on';
+    else if (raw.includes('auto')) mode = 'automatic';
+    else if (raw === 'off' || raw.includes('off')) mode = 'off';
+    document.querySelectorAll('[data-grid-mode]').forEach((btn) => {
+      btn.classList.toggle('is-active', mode && btn.dataset.gridMode === mode);
+    });
   }
 
   function tryConnect() {
@@ -189,6 +303,19 @@
       case 'power':
         if (Math.abs(num) >= 1000) return (num / 1000).toFixed(2) + ' kW';
         return Math.round(num) + ' W';
+      case 'hz':
+        return num.toFixed(2) + ' Hz';
+      case 'var':
+        if (Math.abs(num) >= 1000) return (num / 1000).toFixed(2) + ' kvar';
+        return Math.round(num) + ' var';
+      case 'temp':
+        return num.toFixed(1) + ' °C';
+      case 'duration_s': {
+        if (num >= 86400) return (num / 86400).toFixed(1) + ' d';
+        if (num >= 3600) return (num / 3600).toFixed(1) + ' h';
+        if (num >= 60) return (num / 60).toFixed(0) + ' min';
+        return Math.round(num) + ' s';
+      }
       case 'number':
         if (Math.abs(num) >= 1000) return (num / 1000).toFixed(2);
         return num.toFixed(Math.abs(num) < 10 ? 2 : 1);
@@ -310,6 +437,7 @@
       banner.classList.add('hidden');
     }
 
+    updateGridStartButtons();
     drawSparkline();
   }
 

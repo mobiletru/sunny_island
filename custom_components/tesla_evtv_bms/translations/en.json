@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Tesla EVTV BMS",
-        "description": "Listen for LiteCAN UDP from the EVTV BMS. Entity prefix becomes sensor.<prefix>_<key> (must match the Sunny Island add-on pack_prefix). Cells in series: two Tesla modules = 12S. Optionally enable the SMA Sunny WebBox solar poller below.",
+        "description": "LiteCAN UDP pack sensors + optional SMA Sunny WebBox (HTTP + Modbus TCP proxy parameters).",
         "data": {
           "name": "Name",
           "port": "UDP port",
@@ -14,20 +14,27 @@
           "max_cell_volts": "Max cell volts",
           "webbox_host": "SMA WebBox IP / hostname",
           "webbox_password": "WebBox password (optional)",
-          "webbox_scan_interval": "WebBox poll interval (seconds)"
+          "webbox_scan_interval": "WebBox poll interval (seconds)",
+          "webbox_modbus": "Enable WebBox Modbus TCP",
+          "webbox_modbus_port": "Modbus TCP port",
+          "webbox_unit_gateway": "Modbus unit ID — gateway",
+          "webbox_unit_plant": "Modbus unit ID — plant",
+          "webbox_unit_device": "Modbus unit ID — device (SI)"
         },
         "data_description": {
           "port": "LiteCAN destination port (default 6550).",
-          "entity_prefix": "Must match Sunny Island pack_prefix (e.g. battery_storage_tesla_pack).",
-          "cells_in_series": "Electrical series count, not total cells on the bus. 2×6S modules = 12.",
-          "webbox_host": "IP or hostname only — no http://. Leave empty to disable WebBox solar sensors.",
-          "webbox_password": "Only needed if WebBox JSON-RPC is enabled; home.ajax works without it.",
-          "webbox_scan_interval": "How often to poll the WebBox (minimum 5 s)."
+          "entity_prefix": "Must match Sunny Island pack_prefix.",
+          "cells_in_series": "2×6S modules in series = 12.",
+          "webbox_host": "IP only (e.g. 192.168.100.180). Enables HTTP + Modbus pollers.",
+          "webbox_password": "For JSON-RPC if enabled on the WebBox; home.ajax works without it.",
+          "webbox_modbus": "Poll plant/SI parameters via Modbus TCP on the WebBox (port 502).",
+          "webbox_unit_plant": "Usually 2 (plant parameters on WebBox).",
+          "webbox_unit_device": "Usually 3 (first SI / inverter on RS485)."
         }
       },
       "reconfigure": {
         "title": "Reconfigure Tesla EVTV BMS",
-        "description": "Update pack settings or enable the SMA Sunny WebBox solar poller. UDP port cannot change here (it is the unique id).",
+        "description": "Pack + WebBox HTTP/Modbus settings. UDP port is fixed (unique id).",
         "data": {
           "name": "Name",
           "entity_prefix": "Entity prefix",
@@ -37,12 +44,16 @@
           "max_cell_volts": "Max cell volts",
           "webbox_host": "SMA WebBox IP / hostname",
           "webbox_password": "WebBox password (optional)",
-          "webbox_scan_interval": "WebBox poll interval (seconds)"
+          "webbox_scan_interval": "WebBox poll interval (seconds)",
+          "webbox_modbus": "Enable WebBox Modbus TCP",
+          "webbox_modbus_port": "Modbus TCP port",
+          "webbox_unit_gateway": "Modbus unit ID — gateway",
+          "webbox_unit_plant": "Modbus unit ID — plant",
+          "webbox_unit_device": "Modbus unit ID — device (SI)"
         },
         "data_description": {
-          "webbox_host": "IP or hostname only — no http://. Leave empty to disable WebBox solar sensors.",
-          "webbox_password": "Only needed if WebBox JSON-RPC is enabled; home.ajax works without it.",
-          "webbox_scan_interval": "How often to poll the WebBox (minimum 5 s)."
+          "webbox_host": "IP only. Empty disables WebBox sensors.",
+          "webbox_modbus": "Plant power, yields, grid V/Hz, SI battery params via WebBox proxy."
         }
       }
     },
@@ -60,7 +71,7 @@
     "step": {
       "init": {
         "title": "Tesla EVTV BMS options",
-        "description": "Pack settings and optional SMA Sunny WebBox. Set WebBox IP to create sensor.*_webbox_power / daily_yield / total_yield.",
+        "description": "Pack + SMA WebBox (HTTP overview and Modbus TCP proxy parameters → sensor.<prefix>_webbox_*).",
         "data": {
           "name": "Name",
           "entity_prefix": "Entity prefix",
@@ -70,14 +81,19 @@
           "max_cell_volts": "Max cell volts",
           "webbox_host": "SMA WebBox IP / hostname",
           "webbox_password": "WebBox password (optional)",
-          "webbox_scan_interval": "WebBox poll interval (seconds)"
+          "webbox_scan_interval": "WebBox poll interval (seconds)",
+          "webbox_modbus": "Enable WebBox Modbus TCP",
+          "webbox_modbus_port": "Modbus TCP port",
+          "webbox_unit_gateway": "Modbus unit ID — gateway",
+          "webbox_unit_plant": "Modbus unit ID — plant",
+          "webbox_unit_device": "Modbus unit ID — device (SI)"
         },
         "data_description": {
-          "entity_prefix": "Must match Sunny Island pack_prefix.",
-          "cells_in_series": "Electrical series count (2×6S modules = 12), not total cells on the CAN bus.",
-          "webbox_host": "IP or hostname only — no http://. Clear the field and submit to disable WebBox.",
-          "webbox_password": "Optional. home.ajax works without a password; RPC uses an MD5 hash of this value.",
-          "webbox_scan_interval": "Poll interval in seconds (5–3600)."
+          "webbox_host": "IP only — no http://.",
+          "webbox_modbus": "Read plant + SI registers through the WebBox Modbus gateway.",
+          "webbox_modbus_port": "Default 502.",
+          "webbox_unit_plant": "Default 2.",
+          "webbox_unit_device": "Default 3."
         }
       }
     }

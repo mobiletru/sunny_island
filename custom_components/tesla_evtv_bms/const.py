@@ -1,5 +1,5 @@
 DOMAIN = "tesla_evtv_bms"
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "select"]
 
 CONF_NAME = "name"
 CONF_PORT = "port"
@@ -11,6 +11,11 @@ CONF_MAX_CELL_VOLTS = "max_cell_volts"
 CONF_WEBBOX_HOST = "webbox_host"
 CONF_WEBBOX_PASSWORD = "webbox_password"
 CONF_WEBBOX_SCAN_INTERVAL = "webbox_scan_interval"
+CONF_WEBBOX_MODBUS = "webbox_modbus"
+CONF_WEBBOX_MODBUS_PORT = "webbox_modbus_port"
+CONF_WEBBOX_UNIT_GATEWAY = "webbox_unit_gateway"
+CONF_WEBBOX_UNIT_PLANT = "webbox_unit_plant"
+CONF_WEBBOX_UNIT_DEVICE = "webbox_unit_device"
 
 SIGNAL_UPDATE_ENTITY = f"{DOMAIN}_{{}}_update"
 
@@ -22,8 +27,62 @@ DEFAULT_CELLS_IN_SERIES = 12
 DEFAULT_MIN_CELL_VOLTS = 3.2
 DEFAULT_MAX_CELL_VOLTS = 4.1
 DEFAULT_WEBBOX_SCAN_INTERVAL = 10
+DEFAULT_WEBBOX_MODBUS = True
+DEFAULT_WEBBOX_MODBUS_PORT = 502
+DEFAULT_WEBBOX_UNIT_GATEWAY = 1
+DEFAULT_WEBBOX_UNIT_PLANT = 2
+DEFAULT_WEBBOX_UNIT_DEVICE = 3
 
-WEBBOX_SENSOR_KEYS = ("webbox_power", "webbox_daily_yield", "webbox_total_yield")
+# HTTP overview + Modbus proxy parameters (all under WebBox device)
+WEBBOX_SENSOR_KEYS = (
+    "webbox_power",
+    "webbox_power_kw",
+    "webbox_daily_yield",
+    "webbox_total_yield",
+    "webbox_device_power",
+    "webbox_grid_voltage",
+    "webbox_grid_frequency",
+    "webbox_reactive_power",
+    "webbox_apparent_power",
+    "webbox_status_code",
+    "webbox_status",
+    "webbox_grid_relay_code",
+    "webbox_grid_relay",
+    "webbox_grid_connection_time",
+    "webbox_operating_status_code",
+    "webbox_operating_status",
+    "webbox_generator_status_code",
+    "webbox_generator_status",
+    "webbox_grid_control_code",
+    "webbox_grid_control",
+    "webbox_battery_voltage",
+    "webbox_battery_soc",
+    "webbox_battery_temp",
+    "webbox_battery_current",
+    "webbox_discharge_limit",
+    "webbox_reverse_feed_code",
+    "webbox_reverse_feed",
+    "webbox_feed_soc_upper",
+    "webbox_feed_soc_lower",
+    "webbox_power_setpoint_timeout",
+    "webbox_power_setpoint_mode_code",
+    "webbox_power_setpoint_mode",
+    "webbox_operating_time",
+    "webbox_serial",
+    "webbox_device_serial",
+    "webbox_modbus_profile",
+    "webbox_device_susy_id",
+    "webbox_rpc_status",
+    "webbox_device_key",
+    "webbox_charge_mode",
+    "webbox_fault_text",
+)
+
+# Service: tesla_evtv_bms.set_grid_control
+SERVICE_SET_GRID_CONTROL = "set_grid_control"
+ATTR_MODE = "mode"
+ATTR_DEVICE_ID = "device_id"
+ATTR_ENTRY_ID = "entry_id"
 
 
 def pack_config_from_data(data: dict) -> dict:
@@ -42,14 +101,10 @@ def normalize_entry_data(
     existing: dict | None = None,
     preserve_port: bool = False,
 ) -> dict:
-    """Sanitize form / options values into entry.data shape.
-
-    Single writer used by setup, reconfigure, and options flows.
-    """
+    """Sanitize form / options values into entry.data shape."""
     base = dict(existing or {})
     base.update(user_input)
 
-    # entity_prefix — keep import local-friendly for tests without HA
     from .runtime import entity_prefix_from_data
 
     base[CONF_ENTITY_PREFIX] = entity_prefix_from_data(base)
@@ -64,6 +119,22 @@ def normalize_entry_data(
         base[CONF_WEBBOX_SCAN_INTERVAL] = int(base[CONF_WEBBOX_SCAN_INTERVAL])
     else:
         base[CONF_WEBBOX_SCAN_INTERVAL] = DEFAULT_WEBBOX_SCAN_INTERVAL
+
+    # Modbus proxy defaults
+    if CONF_WEBBOX_MODBUS not in base:
+        base[CONF_WEBBOX_MODBUS] = DEFAULT_WEBBOX_MODBUS
+    else:
+        base[CONF_WEBBOX_MODBUS] = bool(base[CONF_WEBBOX_MODBUS])
+    for key, default in (
+        (CONF_WEBBOX_MODBUS_PORT, DEFAULT_WEBBOX_MODBUS_PORT),
+        (CONF_WEBBOX_UNIT_GATEWAY, DEFAULT_WEBBOX_UNIT_GATEWAY),
+        (CONF_WEBBOX_UNIT_PLANT, DEFAULT_WEBBOX_UNIT_PLANT),
+        (CONF_WEBBOX_UNIT_DEVICE, DEFAULT_WEBBOX_UNIT_DEVICE),
+    ):
+        try:
+            base[key] = int(base.get(key, default))
+        except (TypeError, ValueError):
+            base[key] = default
 
     if preserve_port and existing is not None and CONF_PORT in existing:
         base[CONF_PORT] = existing[CONF_PORT]

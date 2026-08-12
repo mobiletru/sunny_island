@@ -4,29 +4,141 @@ import socket
 import time
 from datetime import timedelta
 
+import voluptuous as vol
+
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
+    ATTR_MODE,
     CONF_WEBBOX_HOST,
+    CONF_WEBBOX_MODBUS,
+    CONF_WEBBOX_MODBUS_PORT,
     CONF_WEBBOX_PASSWORD,
     CONF_WEBBOX_SCAN_INTERVAL,
+    CONF_WEBBOX_UNIT_DEVICE,
+    CONF_WEBBOX_UNIT_GATEWAY,
+    CONF_WEBBOX_UNIT_PLANT,
+    DEFAULT_WEBBOX_MODBUS,
+    DEFAULT_WEBBOX_MODBUS_PORT,
     DEFAULT_WEBBOX_SCAN_INTERVAL,
+    DEFAULT_WEBBOX_UNIT_DEVICE,
+    DEFAULT_WEBBOX_UNIT_GATEWAY,
+    DEFAULT_WEBBOX_UNIT_PLANT,
     DOMAIN,
     PLATFORMS,
+    SERVICE_SET_GRID_CONTROL,
     SIGNAL_UPDATE_ENTITY,
 )
 from .parser import parse_udp_packet
 from .runtime import PackRuntime
-from .webbox import async_poll_webbox
+from .webbox import (
+    apply_grid_control_optimistic,
+    async_poll_webbox,
+    async_set_grid_control,
+    merge_modbus_without_clobbering_rpc_params,
+)
+from .webbox_modbus import async_poll_webbox_modbus
 
 _LOGGER = logging.getLogger(__name__)
 
+SERVICE_SET_GRID_CONTROL_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_MODE): cv.string,
+        vol.Optional("entity_prefix"): cv.string,
+        vol.Optional("name"): cv.string,
+    }
+)
+
+
+async def _write_grid_control_for_runtime(
+    hass: HomeAssistant, rt: PackRuntime, mode: str
+) -> None:
+    """RPC SetParameter (GdManStr) first, then Modbus 40527 if enabled."""
+    cfg = rt.webbox
+    host = (cfg.get("host") or "").strip()
+    if not host:
+        raise HomeAssistantError("WebBox host not configured")
+    session = async_get_clientsession(hass)
+    device_key = (cfg.get("device_key") or rt.values.get("webbox_device_key") or "") or None
+    try:
+        ok = await async_set_grid_control(
+            session,
+            host,
+            mode,
+            password=cfg.get("password") or None,
+            device_key=device_key,
+            use_modbus=bool(cfg.get("modbus", True)),
+            modbus_port=int(cfg.get("port", 502)),
+            unit_device=int(cfg.get("unit_device", 3)),
+        )
+    except ValueError as err:
+        raise HomeAssistantError(str(err)) from err
+    if not ok:
+        raise HomeAssistantError(
+            f"Grid control write failed on {host} "
+            "(RPC SetParameter GdManStr, then Modbus 40527)"
+        )
+    apply_grid_control_optimistic(rt.values, mode)
+    sel = rt.entities.get("webbox_grid_control_select")
+    if sel is not None:
+        sel.handle_values(rt.values)
+        # Push select state into HA immediately after optimistic write
+        if getattr(sel, "hass", None) is not None:
+            sel.async_write_ha_state()
+
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    async def _handle_set_grid_control(call: ServiceCall) -> None:
+        mode = call.data[ATTR_MODE]
+        prefix = (call.data.get("entity_prefix") or "").strip().lower()
+        name_filter = (call.data.get("name") or "").strip().lower()
+        packs = hass.data.get(DOMAIN, {})
+        targets: list[PackRuntime] = []
+        for key, rt in packs.items():
+            if not isinstance(rt, PackRuntime):
+                continue
+            if name_filter and key != name_filter and rt.name != name_filter:
+                continue
+            # entity_prefix filter (UI / plant app); also accept unique_id style
+            if prefix and rt.entity_prefix != prefix and not prefix.endswith(
+                rt.entity_prefix
+            ):
+                continue
+            if not (rt.webbox.get("host") or "").strip():
+                continue
+            targets.append(rt)
+        if not targets:
+            # If no filter, use all packs with webbox; if filter matched nothing, error
+            if name_filter or prefix:
+                raise HomeAssistantError(
+                    "No matching pack with WebBox host found "
+                    f"(prefix={prefix!r} name={name_filter!r})"
+                )
+            targets = [
+                rt
+                for rt in packs.values()
+                if isinstance(rt, PackRuntime) and (rt.webbox.get("host") or "").strip()
+            ]
+        if not targets:
+            raise HomeAssistantError(
+                "No WebBox-enabled pack configured "
+                "(set WebBox host on Tesla EVTV BMS → Configure)"
+            )
+        for rt in targets:
+            await _write_grid_control_for_runtime(hass, rt, mode)
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_GRID_CONTROL,
+        _handle_set_grid_control,
+        schema=SERVICE_SET_GRID_CONTROL_SCHEMA,
+    )
     return True
 
 
@@ -79,38 +191,104 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if webbox_host:
         session = async_get_clientsession(hass)
         webbox_password = entry.data.get(CONF_WEBBOX_PASSWORD) or None
-        scan_interval = entry.data.get(
-            CONF_WEBBOX_SCAN_INTERVAL, DEFAULT_WEBBOX_SCAN_INTERVAL
+        scan_interval = int(
+            entry.data.get(CONF_WEBBOX_SCAN_INTERVAL, DEFAULT_WEBBOX_SCAN_INTERVAL)
         )
-        webbox_fail_state = {"consecutive": 0, "last_warn": 0.0}
+        use_modbus = bool(entry.data.get(CONF_WEBBOX_MODBUS, DEFAULT_WEBBOX_MODBUS))
+        modbus_port = int(
+            entry.data.get(CONF_WEBBOX_MODBUS_PORT, DEFAULT_WEBBOX_MODBUS_PORT)
+        )
+        unit_gw = int(
+            entry.data.get(CONF_WEBBOX_UNIT_GATEWAY, DEFAULT_WEBBOX_UNIT_GATEWAY)
+        )
+        unit_plant = int(
+            entry.data.get(CONF_WEBBOX_UNIT_PLANT, DEFAULT_WEBBOX_UNIT_PLANT)
+        )
+        unit_dev = int(
+            entry.data.get(CONF_WEBBOX_UNIT_DEVICE, DEFAULT_WEBBOX_UNIT_DEVICE)
+        )
+        runtime.webbox = {
+            "host": webbox_host,
+            "port": modbus_port,
+            "modbus": use_modbus,
+            "password": webbox_password,
+            "unit_gateway": unit_gw,
+            "unit_plant": unit_plant,
+            "unit_device": unit_dev,
+            "device_key": None,
+        }
+        fail_state = {"consecutive": 0, "last_warn": 0.0}
 
         async def poll_webbox(now=None):
+            values: dict = {}
+            errors: list[str] = []
+
+            # HTTP/RPC overview + GetParameter (GdManStr grid control)
             try:
-                values = await async_poll_webbox(session, webbox_host, webbox_password)
-            except Exception as e:
-                webbox_fail_state["consecutive"] += 1
+                http_vals = await async_poll_webbox(
+                    session, webbox_host, webbox_password
+                )
+                if http_vals:
+                    values.update(http_vals)
+                    # Cache SI device key for SetParameter writes
+                    dk = http_vals.get("webbox_device_key")
+                    if dk:
+                        runtime.webbox["device_key"] = dk
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"http:{e}")
+
+            # Modbus TCP proxy (plant + SI parameters)
+            if use_modbus:
+                try:
+                    mb_vals = await async_poll_webbox_modbus(
+                        webbox_host,
+                        port=modbus_port,
+                        unit_gateway=unit_gw,
+                        unit_plant=unit_plant,
+                        unit_device=unit_dev,
+                    )
+                    if mb_vals:
+                        # Prefer RPC GetParameter for grid control over Modbus 40527
+                        values = merge_modbus_without_clobbering_rpc_params(
+                            values, mb_vals
+                        )
+                except Exception as e:  # noqa: BLE001
+                    errors.append(f"modbus:{e}")
+
+            if errors and not values:
+                fail_state["consecutive"] += 1
                 t = time.monotonic()
-                if webbox_fail_state["consecutive"] == 1 or (
-                    t - webbox_fail_state["last_warn"]
+                if fail_state["consecutive"] == 1 or (
+                    t - fail_state["last_warn"]
                 ) >= 300:
-                    webbox_fail_state["last_warn"] = t
+                    fail_state["last_warn"] = t
                     _LOGGER.warning(
                         "[%s] WebBox poll failed (%s) x%s: %s",
                         DOMAIN,
                         webbox_host,
-                        webbox_fail_state["consecutive"],
-                        e,
+                        fail_state["consecutive"],
+                        "; ".join(errors),
                     )
                 return
-            if webbox_fail_state["consecutive"]:
+
+            if fail_state["consecutive"]:
                 _LOGGER.info(
                     "[%s] WebBox %s reachable again after %s failures",
                     DOMAIN,
                     webbox_host,
-                    webbox_fail_state["consecutive"],
+                    fail_state["consecutive"],
                 )
-                webbox_fail_state["consecutive"] = 0
+                fail_state["consecutive"] = 0
+
             if values:
+                # kW mirror when HTTP-only power is present (Modbus path already sets it)
+                if "webbox_power" in values and "webbox_power_kw" not in values:
+                    try:
+                        values["webbox_power_kw"] = round(
+                            float(values["webbox_power"]) / 1000.0, 3
+                        )
+                    except (TypeError, ValueError):
+                        pass
                 async_dispatcher_send(
                     hass,
                     SIGNAL_UPDATE_ENTITY.format(name_lower),
@@ -124,13 +302,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         hass.async_create_task(poll_webbox())
         _LOGGER.info(
-            "Started WebBox poller for %s at %s every %ds",
+            "Started WebBox poller for %s at %s every %ds (modbus=%s port=%s)",
             name,
             webbox_host,
             scan_interval,
+            use_modbus,
+            modbus_port,
         )
     else:
-        _LOGGER.info("WebBox host empty — solar poller disabled for %s", name)
+        _LOGGER.info("WebBox host empty — solar/modbus poller disabled for %s", name)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

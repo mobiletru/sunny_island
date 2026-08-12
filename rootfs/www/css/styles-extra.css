@@ -322,7 +322,7 @@ flex-wrap:wrap;
 gap:0.75rem;
 align-items:center;
 }
-.btn-ok,.btn-danger{
+.btn-ok,.btn-danger,.btn-secondary{
 border:0;
 border-radius:10px;
 padding:0.65rem 1.1rem;
@@ -332,6 +332,33 @@ font-family:inherit;
 }
 .btn-ok{background:#3dd68c;color:#0a1a12;}
 .btn-danger{background:#f07178;color:#1a0a0c;}
+.btn-secondary{
+background:rgba(79,195,247,0.18);
+color:#9ad8f5;
+border:1px solid rgba(79,195,247,0.35);
+}
+.btn-secondary:hover{background:rgba(79,195,247,0.28);}
+.btn-ok.is-active,.btn-danger.is-active,.btn-secondary.is-active{
+outline:2px solid #ff7700;
+outline-offset:2px;
+}
+.grid-start-row{margin-bottom:0.35rem;}
+.footer-link{color:var(--accent,#6ee7b7);text-decoration:none;opacity:.9}
+.footer-link:hover{text-decoration:underline;opacity:1}
+.btn-ghost-sm{
+width:100%;
+border:1px solid var(--border,#2d3a4f);
+background:transparent;
+color:var(--text-muted,#8b9bb4);
+border-radius:8px;
+padding:0.45rem 0.65rem;
+font-size:0.8rem;
+font-weight:600;
+cursor:pointer;
+font-family:inherit;
+margin-top:0.35rem;
+}
+.btn-ghost-sm:hover{border-color:#4fc3f7;color:#e7ecf3;}
 .action-stat{
 display:flex;
 flex-direction:column;

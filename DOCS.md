@@ -1,9 +1,10 @@
-# Sunny Island app (all-in-one)
+# Sunny Island app (one plant app)
 
 ## Parts
 
 1. **BMS installer** — copies `tesla_evtv_bms` into `/config/custom_components`
-2. **Plant UI** — Ingress dashboard (pack + Enphase + Tessie)
+2. **Plant UI** — **the only sidebar entry** (Ingress: pack + WebBox + Enphase + Tessie)
+3. **History** (optional) — Lovelace YAML at `/sunny-island/*`, **not** in the sidebar
 
 ## Integration sync
 
@@ -30,48 +31,66 @@ WebSocket to HA (`/api/websocket`) using either:
 - Add-on option **pack_prefix** must match (drives plant UI `config.js`)
 - Tessie: `sensor.x_*` / `switch.x_charge`
 
-## SMA Sunny WebBox
+## SMA Sunny WebBox (HTTP + Modbus proxy)
 
-WebBox is configured on the **Tesla EVTV BMS** integration (not the Sunny Island add-on options):
+WebBox is built into the **Tesla EVTV BMS** integration (Sunny Island app):
 
-1. **Settings → Devices & services → Tesla EVTV BMS → Configure** (gear), or **⋮ → Reconfigure**
-2. Set **SMA WebBox IP / hostname** (no `http://`)
-3. Optional password (only if JSON-RPC is enabled on the WebBox)
-4. Submit — creates `sensor.<prefix>_webbox_power`, `_webbox_daily_yield`, `_webbox_total_yield`
+1. Enable **Modbus** on the WebBox (Interfaces → Modbus)
+2. **Settings → Devices & services → Tesla EVTV BMS → Configure**
+   - **SMA WebBox IP** (e.g. `192.168.100.180`)
+   - **Password** (optional; JSON-RPC only)
+   - **Enable WebBox Modbus TCP** (default on), port **502**
+   - Unit IDs: gateway **1**, plant **2**, device/SI **3**
+3. Restart Core after first install
 
-Leave the host empty to disable the solar poller. Pack detail + WebBox plant dashboards show these sensors (unavailable until host is set).
+Creates `sensor.<pack_prefix>_webbox_*` — plant power/yields, grid V/Hz, SI battery V/temp/SoC, status, reactive/apparent, serials, **grid start** sensors (connection timer, operating status, generator status, grid control mode).
 
-## WebBox Modbus TCP
+### Grid start / control (parameter write)
 
-On add-on start, packages are installed into `/config/packages/`:
-- `sunny_island.yaml` — helpers (auto amps, voltage stop)
-- `webbox_modbus.yaml` — Modbus TCP sensors
+**Start grid** (plant UI button / select / service) writes **WebBox JSON-RPC
+`SetParameter`** on channel **`GdManStr`** (values `Start` | `Auto` | `Stop`).
+Modbus register 40527 is fallback only — on SI6048UM it typically returns
+illegal address. After updating the app, **restart HA Core** so the
+integration reloads (files alone are not enough while Core is running).
 
-Ensure `configuration.yaml` includes:
+Writes use **WebBox JSON-RPC `SetParameter`** on channel **`GdManStr`**
+(`Start` | `Auto` | `Stop`). That is the path that works on SI6048UM + Sunny
+WebBox; Modbus holding **40527** often returns illegal address and is only a
+fallback. Set the WebBox access password in **Configure** (plain text, e.g.
+`sma` — the integration MD5-hashes it for RPC).
+
+| Entity / service | Role |
+|------------------|------|
+| `select.<prefix>_webbox_grid_control` | **Write** GdManStr via SetParameter — Off · Manual On (request grid) · Automatic |
+| `sensor.<prefix>_webbox_grid_connection_time` | Seconds until next grid connection attempt (**30199**) |
+| `sensor.<prefix>_webbox_operating_status` | Parallel grid / Backup / Generator / Emergency charge (**33003**) |
+| `sensor.<prefix>_webbox_generator_status` | Generator status enum (**30917**) |
+| Service `tesla_evtv_bms.set_grid_control` | Same write as the select (`mode: manual_on` / `automatic` / `off`) |
+
+Example:
 
 ```yaml
-homeassistant:
-  packages: !include_dir_named packages
+service: tesla_evtv_bms.set_grid_control
+data:
+  mode: manual_on   # start / request grid (GdManStr=Start)
 ```
 
-1. Enable Modbus on the WebBox (Interfaces → Modbus)
-2. Add to `/config/secrets.yaml` (see `ha_config/secrets.example.yaml`):
+> If the write fails: enable **RPC** on the WebBox, confirm the password, and
+> check unit ID **3** is the SI when using the Modbus fallback.
 
-```yaml
-webbox_host: 192.168.x.x
-webbox_password: sma   # optional; for BMS JSON-RPC if enabled
-```
+| Unit ID | Role |
+|---------|------|
+| 1 | Gateway |
+| 2 | Plant parameters |
+| 3 | First SI / inverter on RS485 |
 
-3. Set the same host/password on **Tesla EVTV BMS → Configure** for HTTP `home.ajax` sensors
-4. Restart Core after first install
+**Sidebar:** one panel — Ingress **Sunny Island** (plant controls + live gauges).
 
-| Unit ID | Role | Example sensors |
-|---------|------|-----------------|
-| 1 | Gateway | profile, WebBox serial |
-| 2 | Plant | plant power, daily/total yield |
-| 3 | Device (SI) | AC power, grid V/Hz, status, battery V/temp |
+**History:** optional multi-view Lovelace (Overview · Cells · Energy · WebBox · Solar & car)
+at `/sunny-island/overview` — linked from the plant UI footer; hidden from sidebar so
+you do not get two “Sunny Island” apps.
 
-Dashboards: **WebBox plant → Modbus** and **Pack detail → Solar & car**.
+Add-on start also installs `packages/sunny_island.yaml` (Tessie helpers) and unifies the sidebar.
 
 ## Auto Tessie charge amps (from EVTV BMS)
 
@@ -94,5 +113,8 @@ Install helpers via package `packages/sunny_island.yaml` and merge
 
 Start/stop charge buttons call:
 
-- `script.start_car_charger`
+- `script.start_car_charger` — wake · BMS amps · Tessie start; **auto-raises
+  charge limit** if car SoC is already at/above `number.x_charge_limit`
+  (otherwise Tesla stays `complete` and will not charge)
 - `script.shutdown_car_charger`
+

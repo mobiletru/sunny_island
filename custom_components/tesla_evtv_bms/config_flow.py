@@ -23,6 +23,11 @@ from .const import (
     CONF_WEBBOX_HOST,
     CONF_WEBBOX_PASSWORD,
     CONF_WEBBOX_SCAN_INTERVAL,
+    CONF_WEBBOX_MODBUS,
+    CONF_WEBBOX_MODBUS_PORT,
+    CONF_WEBBOX_UNIT_GATEWAY,
+    CONF_WEBBOX_UNIT_PLANT,
+    CONF_WEBBOX_UNIT_DEVICE,
     DEFAULT_PORT,
     DEFAULT_ENTITY_PREFIX,
     DEFAULT_PACK_SIZE,
@@ -30,6 +35,11 @@ from .const import (
     DEFAULT_MIN_CELL_VOLTS,
     DEFAULT_MAX_CELL_VOLTS,
     DEFAULT_WEBBOX_SCAN_INTERVAL,
+    DEFAULT_WEBBOX_MODBUS,
+    DEFAULT_WEBBOX_MODBUS_PORT,
+    DEFAULT_WEBBOX_UNIT_GATEWAY,
+    DEFAULT_WEBBOX_UNIT_PLANT,
+    DEFAULT_WEBBOX_UNIT_DEVICE,
     normalize_entry_data,
 )
 
@@ -88,6 +98,26 @@ def _schema(*, include_port: bool = True, defaults: dict | None = None) -> vol.S
                     CONF_WEBBOX_SCAN_INTERVAL, DEFAULT_WEBBOX_SCAN_INTERVAL
                 ),
             ): vol.All(vol.Coerce(int), vol.Range(min=5, max=3600)),
+            vol.Optional(
+                CONF_WEBBOX_MODBUS,
+                default=d.get(CONF_WEBBOX_MODBUS, DEFAULT_WEBBOX_MODBUS),
+            ): bool,
+            vol.Optional(
+                CONF_WEBBOX_MODBUS_PORT,
+                default=d.get(CONF_WEBBOX_MODBUS_PORT, DEFAULT_WEBBOX_MODBUS_PORT),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
+            vol.Optional(
+                CONF_WEBBOX_UNIT_GATEWAY,
+                default=d.get(CONF_WEBBOX_UNIT_GATEWAY, DEFAULT_WEBBOX_UNIT_GATEWAY),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=247)),
+            vol.Optional(
+                CONF_WEBBOX_UNIT_PLANT,
+                default=d.get(CONF_WEBBOX_UNIT_PLANT, DEFAULT_WEBBOX_UNIT_PLANT),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=247)),
+            vol.Optional(
+                CONF_WEBBOX_UNIT_DEVICE,
+                default=d.get(CONF_WEBBOX_UNIT_DEVICE, DEFAULT_WEBBOX_UNIT_DEVICE),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=247)),
         }
     )
     return vol.Schema(fields)

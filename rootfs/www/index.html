@@ -40,7 +40,10 @@
         <div class="settings-wrap">
           <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
           <div id="settings-panel" class="settings-panel">
-            <button id="start-charger-btn" class="btn-ok-sm">Start charging (Tessie)</button>
+            <button id="grid-start-menu-btn" class="btn-ok-sm" data-grid-mode="manual_on">Start grid (WebBox)</button>
+            <button id="grid-auto-menu-btn" class="btn-ghost-sm" data-grid-mode="automatic">Grid automatic</button>
+            <button id="grid-off-menu-btn" class="btn-danger-sm" data-grid-mode="off">Grid control off</button>
+            <button id="start-charger-btn" class="btn-ok-sm" style="margin-top:0.5rem">Start charging (Tessie)</button>
             <button id="shutdown-charger-btn" class="btn-danger-sm">Stop charging (Tessie)</button>
             <button id="disconnect-btn" class="btn-ghost" style="margin-top:0.5rem">Disconnect</button>
           </div>
@@ -163,6 +166,54 @@
             <div class="tile" data-metric="carChargerKw"><span class="tile-l">Charger kW</span><span class="metric-value">—</span></div>
           </div>
 
+          <div class="section-label">WEBBOX · MODBUS (plant + SI)</div>
+          <div class="tile-grid">
+            <div class="tile" data-metric="webboxPower"><span class="tile-l">Plant W</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxDay"><span class="tile-l">Today kWh</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxTotal"><span class="tile-l">Lifetime kWh</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxStatus"><span class="tile-l">Status</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxGridV"><span class="tile-l">Grid V</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxGridHz"><span class="tile-l">Grid Hz</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxDevicePower"><span class="tile-l">Device AC</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxBattV"><span class="tile-l">SI batt V</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxBattSoc"><span class="tile-l">SI SoC</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxBattTemp"><span class="tile-l">SI temp</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxBattA"><span class="tile-l">SI batt A</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxRelay"><span class="tile-l">Grid relay</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxReactive"><span class="tile-l">Reactive</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxApparent"><span class="tile-l">Apparent</span><span class="metric-value">—</span></div>
+          </div>
+
+          <div class="section-label">SUNNY ISLAND · PARAMETERS</div>
+          <div class="tile-grid">
+            <div class="tile" data-metric="webboxDischargeLimit"><span class="tile-l">Discharge limit</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxReverseFeed"><span class="tile-l">Reverse feed</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxFeedSocUpper"><span class="tile-l">Feed SoC upper</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxFeedSocLower"><span class="tile-l">Feed SoC lower</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxPowerSpMode"><span class="tile-l">Setpoint mode</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxPowerSpTimeout"><span class="tile-l">Setpoint timeout</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxOpStatus"><span class="tile-l">Operating</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxGenStatus"><span class="tile-l">Generator</span><span class="metric-value">—</span></div>
+          </div>
+          <p class="protect-note">SI parameters · Modbus unit 3 · limits 31009 / 40705–40707 · reverse feed 40679 · setpoint mode 40210</p>
+
+          <div class="section-label">GRID START · WEBBOX</div>
+          <div class="tile-grid">
+            <div class="tile" data-metric="webboxGridControl"><span class="tile-l">Control mode</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxGridConnTime"><span class="tile-l">Start timer</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxOpStatus"><span class="tile-l">Operating</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxGenStatus"><span class="tile-l">Generator</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxRelay"><span class="tile-l">Grid relay</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxGridV"><span class="tile-l">Grid V</span><span class="metric-value">—</span></div>
+          </div>
+          <div class="action-row grid-start-row">
+            <button type="button" id="grid-start-btn" class="btn-ok" data-grid-mode="manual_on">Start grid</button>
+            <button type="button" id="grid-auto-btn" class="btn-secondary" data-grid-mode="automatic">Automatic</button>
+            <button type="button" id="grid-off-btn" class="btn-danger" data-grid-mode="off">Control off</button>
+          </div>
+          <p class="protect-note">Grid control · WebBox <b>SetParameter GdManStr</b> (Start / Auto / Stop) · Modbus 40527 fallback · Manual On = request grid · SI may still enforce SoC / voltage locks</p>
+
+          <div class="section-label">TESSIE · CHARGE</div>
           <div class="action-row">
             <button id="start-charger-main" class="btn-ok">Start charging</button>
             <button id="stop-charger-main" class="btn-danger">Stop charging</button>
@@ -181,9 +232,11 @@
 
     <div id="toast" class="toast" role="status"></div>
     <footer class="footer">
-      <span>Sunny Island plant app</span>
+      <span>Sunny Island</span>
       <span>·</span>
-      <span>Home Assistant live data</span>
+      <span>one plant app</span>
+      <span>·</span>
+      <a id="history-link" class="footer-link" href="/sunny-island/overview" target="_top" rel="noopener">History graphs</a>
       <span>·</span>
       <span id="year"></span>
     </footer>
