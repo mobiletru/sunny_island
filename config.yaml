@@ -1,9 +1,9 @@
 name: Sunny Island
-version: "2.1.3"
+version: "2.2.7"
 slug: sunny_island
 description: >-
-  All-in-one plant app: Tesla EVTV BMS integration installer (LiteCAN UDP) plus
-  live dashboard (pack gauges, SMA WebBox, Enphase, Tessie kWh, start/stop charge).
+  One plant app: Tesla EVTV BMS + live Ingress UI (pack, WebBox grid start,
+  Enphase, Tessie charge). Single sidebar entry — no separate Lovelace app.
 url: https://github.com/mobiletru/sunny_island
 arch:
   - aarch64
