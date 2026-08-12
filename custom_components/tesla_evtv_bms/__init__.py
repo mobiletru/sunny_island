@@ -16,6 +16,8 @@ from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
     ATTR_MODE,
+    ATTR_PARAMETER,
+    ATTR_VALUE,
     CONF_WEBBOX_HOST,
     CONF_WEBBOX_MODBUS,
     CONF_WEBBOX_MODBUS_PORT,
@@ -33,6 +35,7 @@ from .const import (
     DOMAIN,
     PLATFORMS,
     SERVICE_SET_GRID_CONTROL,
+    SERVICE_SET_SI_PARAMETER,
     SIGNAL_UPDATE_ENTITY,
 )
 from .parser import parse_udp_packet
@@ -43,13 +46,26 @@ from .webbox import (
     async_set_grid_control,
     merge_modbus_without_clobbering_rpc_params,
 )
-from .webbox_modbus import async_poll_webbox_modbus
+from .webbox_modbus import (
+    apply_si_parameter_optimistic,
+    async_poll_webbox_modbus,
+    async_write_si_parameter,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 SERVICE_SET_GRID_CONTROL_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_MODE): cv.string,
+        vol.Optional("entity_prefix"): cv.string,
+        vol.Optional("name"): cv.string,
+    }
+)
+
+SERVICE_SET_SI_PARAMETER_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_PARAMETER): cv.string,
+        vol.Required(ATTR_VALUE): vol.Any(cv.string, int, float, bool),
         vol.Optional("entity_prefix"): cv.string,
         vol.Optional("name"): cv.string,
     }
@@ -133,13 +149,91 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         for rt in targets:
             await _write_grid_control_for_runtime(hass, rt, mode)
 
+    async def _webbox_targets(
+        prefix: str, name_filter: str
+    ) -> list[PackRuntime]:
+        packs = hass.data.get(DOMAIN, {})
+        targets: list[PackRuntime] = []
+        for key, rt in packs.items():
+            if not isinstance(rt, PackRuntime):
+                continue
+            if name_filter and key != name_filter and rt.name != name_filter:
+                continue
+            if prefix and rt.entity_prefix != prefix and not prefix.endswith(
+                rt.entity_prefix
+            ):
+                continue
+            if not (rt.webbox.get("host") or "").strip():
+                continue
+            targets.append(rt)
+        if not targets:
+            if name_filter or prefix:
+                raise HomeAssistantError(
+                    "No matching pack with WebBox host found "
+                    f"(prefix={prefix!r} name={name_filter!r})"
+                )
+            targets = [
+                rt
+                for rt in packs.values()
+                if isinstance(rt, PackRuntime) and (rt.webbox.get("host") or "").strip()
+            ]
+        if not targets:
+            raise HomeAssistantError(
+                "No WebBox-enabled pack configured "
+                "(set WebBox host on Tesla EVTV BMS → Configure)"
+            )
+        return targets
+
+    async def _handle_set_si_parameter(call: ServiceCall) -> None:
+        param = call.data[ATTR_PARAMETER]
+        value = call.data[ATTR_VALUE]
+        prefix = (call.data.get("entity_prefix") or "").strip().lower()
+        name_filter = (call.data.get("name") or "").strip().lower()
+        targets = await _webbox_targets(prefix, name_filter)
+        param_key = str(param).strip().lower().replace(" ", "_").replace("-", "_")
+        for rt in targets:
+            if param_key in ("grid_control", "grid", "gdmanstr"):
+                await _write_grid_control_for_runtime(hass, rt, str(value))
+                continue
+            cfg = rt.webbox
+            host = (cfg.get("host") or "").strip()
+            if not bool(cfg.get("modbus", True)):
+                raise HomeAssistantError(
+                    "WebBox Modbus is disabled — enable it to write SI parameters"
+                )
+            try:
+                ok, code = await async_write_si_parameter(
+                    host,
+                    param_key,
+                    value,
+                    port=int(cfg.get("port", 502)),
+                    unit_device=int(cfg.get("unit_device", 3)),
+                )
+            except ValueError as err:
+                raise HomeAssistantError(str(err)) from err
+            if not ok:
+                raise HomeAssistantError(
+                    f"SI parameter write failed: {param_key}={value!r} on {host}"
+                )
+            apply_si_parameter_optimistic(rt.values, param_key, code)
+            async_dispatcher_send(
+                hass, SIGNAL_UPDATE_ENTITY.format(rt.name), rt.values
+            )
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_SET_GRID_CONTROL,
         _handle_set_grid_control,
         schema=SERVICE_SET_GRID_CONTROL_SCHEMA,
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_SI_PARAMETER,
+        _handle_set_si_parameter,
+        schema=SERVICE_SET_SI_PARAMETER_SCHEMA,
+    )
     return True
+
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

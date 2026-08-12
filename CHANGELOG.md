@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.8
+
+- **Plant UI:** **all parameters as buttons** — full control panel for grid, reverse feed, power setpoint mode, discharge / feed SoC limits, setpoint timeout, Tessie charge, plus live readout buttons (pack, SI, solar, car)
+- **Service:** `tesla_evtv_bms.set_si_parameter` writes SI Modbus params (unit 3); grid control still prefers RPC `GdManStr`
+- Integration **1.9.8**
+
 ## 2.2.7
 
 - **One app:** combine dual sidebar entries into a **single Sunny Island** Ingress panel

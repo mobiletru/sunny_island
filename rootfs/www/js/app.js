@@ -16,11 +16,13 @@
     $('#app-subtitle').textContent = APP_CONFIG.subtitle;
     $('#year').textContent = new Date().getFullYear();
     initRingArcs();
+    renderParamPanel();
     renderMetricPlaceholders();
     bindAuth();
     bindSettings();
     bindChargerButtons();
     bindGridStartButtons();
+    bindParamPanel();
     tryConnect();
   }
 
@@ -143,6 +145,183 @@
     $('#shutdown-charger-btn')?.addEventListener('click', stop);
     $('#start-charger-main')?.addEventListener('click', start);
     $('#stop-charger-main')?.addEventListener('click', stop);
+  }
+
+  /** Build full parameter-as-buttons panel from PARAM_CONTROLS */
+  function renderParamPanel() {
+    const panel = $('#param-panel');
+    if (!panel || typeof PARAM_CONTROLS === 'undefined') return;
+    const groups = [];
+    const byGroup = {};
+    PARAM_CONTROLS.forEach((p) => {
+      if (!byGroup[p.group]) {
+        byGroup[p.group] = [];
+        groups.push(p.group);
+      }
+      byGroup[p.group].push(p);
+    });
+    panel.innerHTML = groups
+      .map((g) => {
+        const rows = byGroup[g]
+          .map((ctrl) => {
+            const liveId = `param-live-${ctrl.id}`;
+            let controls = '';
+            if (ctrl.kind === 'enum' || ctrl.kind === 'action') {
+              controls = (ctrl.options || [])
+                .map(
+                  (o) =>
+                    `<button type="button" class="param-btn ${o.cls || 'btn-secondary'}" ` +
+                    `data-param-id="${ctrl.id}" data-param-value="${o.value}" ` +
+                    (o.action ? `data-param-action="${o.action}" ` : '') +
+                    `>${o.label}</button>`
+                )
+                .join('');
+            } else if (ctrl.kind === 'number') {
+              const presets = (ctrl.presets || [])
+                .map(
+                  (n) =>
+                    `<button type="button" class="param-btn btn-secondary" ` +
+                    `data-param-id="${ctrl.id}" data-param-value="${n}">${n}</button>`
+                )
+                .join('');
+              controls =
+                `<button type="button" class="param-btn btn-ghost-sm" data-param-id="${ctrl.id}" data-param-step="-">−${ctrl.step || 5}</button>` +
+                presets +
+                `<button type="button" class="param-btn btn-ghost-sm" data-param-id="${ctrl.id}" data-param-step="+">+${ctrl.step || 5}</button>`;
+            } else {
+              controls = `<button type="button" class="param-btn param-readonly" disabled data-param-id="${ctrl.id}">Live</button>`;
+            }
+            return `
+              <div class="param-row" data-param-row="${ctrl.id}" data-kind="${ctrl.kind}">
+                <div class="param-head">
+                  <span class="param-title">${ctrl.title}</span>
+                  <span class="param-live" id="${liveId}">—</span>
+                </div>
+                <div class="param-btns">${controls}</div>
+              </div>`;
+          })
+          .join('');
+        return `<div class="param-group"><div class="param-group-title">${g}</div>${rows}</div>`;
+      })
+      .join('');
+  }
+
+  function currentMetricValue(metricKey) {
+    if (!client || !metricKey || !METRICS[metricKey]) return null;
+    const st = client.getState(METRICS[metricKey].entity);
+    if (!st || BAD_STATES.has(String(st.state).toLowerCase())) return null;
+    return st.state;
+  }
+
+  function writeSiParameter(parameter, value) {
+    return client.callService('tesla_evtv_bms', 'set_si_parameter', {
+      parameter,
+      value: String(value),
+      entity_prefix: typeof PACK_PREFIX === 'string' ? PACK_PREFIX : undefined,
+    });
+  }
+
+  function bindParamPanel() {
+    const panel = $('#param-panel');
+    if (!panel) return;
+    panel.addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-param-id]');
+      if (!btn || btn.disabled) return;
+      const id = btn.dataset.paramId;
+      const ctrl = (PARAM_CONTROLS || []).find((p) => p.id === id);
+      if (!ctrl) return;
+      if (!client) {
+        toast('Connect to Home Assistant first', 'error');
+        return;
+      }
+      // Action buttons (Tessie)
+      if (btn.dataset.paramAction === 'start_charge') {
+        $('#start-charger-main')?.click();
+        return;
+      }
+      if (btn.dataset.paramAction === 'stop_charge') {
+        $('#stop-charger-main')?.click();
+        return;
+      }
+      if (ctrl.kind === 'readonly') return;
+
+      let value = btn.dataset.paramValue;
+      if (btn.dataset.paramStep) {
+        const cur = parseFloat(currentMetricValue(ctrl.metric));
+        const step = Number(ctrl.step) || 5;
+        let next = Number.isFinite(cur) ? cur : 0;
+        next = btn.dataset.paramStep === '+' ? next + step : next - step;
+        if (ctrl.min != null) next = Math.max(ctrl.min, next);
+        if (ctrl.max != null) next = Math.min(ctrl.max, next);
+        value = String(Math.round(next));
+      }
+      if (value == null || value === '') return;
+      if (!ctrl.write?.parameter) return;
+      btn.classList.add('is-busy');
+      try {
+        await writeSiParameter(ctrl.write.parameter, value);
+        toast(`${ctrl.title} → ${value}`, 'success');
+        // optimistic live label
+        const live = document.getElementById(`param-live-${ctrl.id}`);
+        if (live && ctrl.kind === 'number') live.textContent = value;
+      } catch (err) {
+        toast(err.message || 'Parameter write failed', 'error');
+      } finally {
+        btn.classList.remove('is-busy');
+      }
+    });
+  }
+
+  function updateParamPanel() {
+    if (!client || typeof PARAM_CONTROLS === 'undefined') return;
+    PARAM_CONTROLS.forEach((ctrl) => {
+      const live = document.getElementById(`param-live-${ctrl.id}`);
+      const meta = ctrl.metric && METRICS[ctrl.metric];
+      if (live && meta) {
+        const st = client.getState(meta.entity);
+        live.textContent = formatValue(meta, st);
+      }
+      // highlight active enum option
+      if (ctrl.kind === 'enum') {
+        const raw = String(currentMetricValue(ctrl.metric) || '').toLowerCase();
+        document
+          .querySelectorAll(`[data-param-id="${ctrl.id}"][data-param-value]`)
+          .forEach((btn) => {
+            const v = (btn.dataset.paramValue || '').toLowerCase();
+            let active = false;
+            if (ctrl.id === 'grid_control') {
+              if (v === 'manual_on')
+                active = raw.includes('manual') || raw.includes('request') || raw === 'on';
+              else if (v === 'automatic') active = raw.includes('auto');
+              else if (v === 'off') active = raw === 'off' || raw.includes('off');
+            } else if (ctrl.id === 'reverse_feed') {
+              if (v === 'yes') active = raw === 'yes' || raw.includes('yes');
+              else if (v === 'no') active = raw === 'no' || raw.includes('no');
+            } else if (ctrl.id === 'power_setpoint_mode') {
+              if (v === 'off') active = raw === 'off';
+              else if (v === 'manual_w') active = raw.includes('manual w') || raw.includes(' w');
+              else if (v === 'manual_pct')
+                active = raw.includes('%') || raw.includes('percent') || raw.includes('pct');
+              else if (v === 'external') active = raw.includes('external');
+            } else {
+              active = raw === v || raw.includes(v);
+            }
+            btn.classList.toggle('is-active', active);
+          });
+      }
+      if (ctrl.kind === 'number') {
+        const cur = parseFloat(currentMetricValue(ctrl.metric));
+        document
+          .querySelectorAll(`[data-param-id="${ctrl.id}"][data-param-value]`)
+          .forEach((btn) => {
+            const v = parseFloat(btn.dataset.paramValue);
+            btn.classList.toggle(
+              'is-active',
+              Number.isFinite(cur) && Number.isFinite(v) && Math.abs(cur - v) < 0.51
+            );
+          });
+      }
+    });
   }
 
   /** WebBox SMA reg 40527 — manual grid request / automatic / off */
@@ -438,6 +617,7 @@
     }
 
     updateGridStartButtons();
+    updateParamPanel();
     drawSparkline();
   }
 

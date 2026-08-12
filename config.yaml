@@ -1,9 +1,9 @@
 name: Sunny Island
-version: "2.2.7"
+version: "2.2.8"
 slug: sunny_island
 description: >-
-  One plant app: Tesla EVTV BMS + live Ingress UI (pack, WebBox grid start,
-  Enphase, Tessie charge). Single sidebar entry — no separate Lovelace app.
+  One plant app: Tesla EVTV BMS + Ingress UI with all SI parameters as buttons
+  (grid, reverse feed, setpoints, limits) + Enphase + Tessie.
 url: https://github.com/mobiletru/sunny_island
 arch:
   - aarch64

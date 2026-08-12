@@ -343,6 +343,94 @@ outline:2px solid #ff7700;
 outline-offset:2px;
 }
 .grid-start-row{margin-bottom:0.35rem;}
+
+/* Full parameter-as-buttons panel */
+.param-panel{
+display:flex;
+flex-direction:column;
+gap:0.85rem;
+margin-bottom:0.5rem;
+}
+.param-group{
+background:rgba(255,255,255,0.03);
+border:1px solid rgba(255,255,255,0.08);
+border-radius:12px;
+padding:0.65rem 0.75rem 0.75rem;
+}
+.param-group-title{
+font-size:0.72rem;
+font-weight:700;
+letter-spacing:0.06em;
+text-transform:uppercase;
+color:var(--text-muted,#8b9bb4);
+margin-bottom:0.55rem;
+}
+.param-row{
+padding:0.45rem 0;
+border-top:1px solid rgba(255,255,255,0.05);
+}
+.param-row:first-of-type{border-top:0;padding-top:0;}
+.param-head{
+display:flex;
+align-items:baseline;
+justify-content:space-between;
+gap:0.75rem;
+margin-bottom:0.4rem;
+}
+.param-title{
+font-size:0.88rem;
+font-weight:600;
+color:var(--text,#e7ecf3);
+}
+.param-live{
+font-family:var(--mono,'JetBrains Mono',monospace);
+font-size:0.9rem;
+font-weight:600;
+color:#ffb86b;
+white-space:nowrap;
+}
+.param-btns{
+display:flex;
+flex-wrap:wrap;
+gap:0.4rem;
+}
+.param-btn{
+border:0;
+border-radius:9px;
+padding:0.5rem 0.75rem;
+font-weight:600;
+font-size:0.8rem;
+cursor:pointer;
+font-family:inherit;
+min-height:2.25rem;
+}
+.param-btn.btn-ok{background:#3dd68c;color:#0a1a12;}
+.param-btn.btn-danger{background:#f07178;color:#1a0a0c;}
+.param-btn.btn-secondary{
+background:rgba(79,195,247,0.16);
+color:#9ad8f5;
+border:1px solid rgba(79,195,247,0.35);
+}
+.param-btn.btn-ghost-sm{
+background:transparent;
+color:var(--text-muted,#8b9bb4);
+border:1px solid var(--border,#2d3a4f);
+}
+.param-btn.param-readonly{
+background:rgba(255,255,255,0.04);
+color:var(--text-muted,#8b9bb4);
+border:1px dashed rgba(255,255,255,0.12);
+cursor:default;
+opacity:0.85;
+}
+.param-btn.is-active{
+outline:2px solid #ff7700;
+outline-offset:2px;
+box-shadow:0 0 0 1px rgba(255,119,0,0.35);
+}
+.param-btn.is-busy{opacity:0.55;pointer-events:none;}
+.param-btn:not(:disabled):hover{filter:brightness(1.08);}
+
 .footer-link{color:var(--accent,#6ee7b7);text-decoration:none;opacity:.9}
 .footer-link:hover{text-decoration:underline;opacity:1}
 .btn-ghost-sm{

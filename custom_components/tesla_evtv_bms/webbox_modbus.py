@@ -406,3 +406,207 @@ async def async_write_grid_control(
             unit_device,
         )
     return ok
+
+
+# Writable SI / plant parameters (Modbus holding U32 on unit 3 unless noted).
+# value_map: optional friendly option → raw enum code
+SI_WRITE_PARAMS: dict[str, dict[str, Any]] = {
+    "grid_control": {
+        "address": GRID_CONTROL_REG,
+        "value_map": {
+            **GRID_CONTROL_OPTIONS,
+            "on": GRID_CONTROL_ON,
+            "manual": GRID_CONTROL_ON,
+            "start": GRID_CONTROL_ON,
+            "request": GRID_CONTROL_ON,
+            "auto": GRID_CONTROL_AUTO,
+            "stop": GRID_CONTROL_OFF,
+        },
+        "sensor_keys": (
+            "webbox_grid_control_code",
+            "webbox_grid_control",
+            "webbox_grid_control_option",
+        ),
+    },
+    "reverse_feed": {
+        "address": 40679,
+        "value_map": {
+            "yes": 1129,
+            "no": 1130,
+            "on": 1129,
+            "off": 1130,
+            "true": 1129,
+            "false": 1130,
+            "1": 1129,
+            "0": 1130,
+        },
+        "sensor_keys": ("webbox_reverse_feed_code", "webbox_reverse_feed"),
+    },
+    "power_setpoint_mode": {
+        "address": 40210,
+        "value_map": {
+            "off": 303,
+            "manual_w": 1077,
+            "manual_pct": 1078,
+            "manual_%": 1078,
+            "external": 1079,
+            "w": 1077,
+            "pct": 1078,
+            "percent": 1078,
+        },
+        "sensor_keys": (
+            "webbox_power_setpoint_mode_code",
+            "webbox_power_setpoint_mode",
+        ),
+    },
+    "discharge_limit": {
+        "address": 31009,
+        "min": 0,
+        "max": 100,
+        "sensor_keys": ("webbox_discharge_limit",),
+    },
+    "feed_soc_upper": {
+        "address": 40705,
+        "min": 0,
+        "max": 100,
+        "sensor_keys": ("webbox_feed_soc_upper",),
+    },
+    "feed_soc_lower": {
+        "address": 40707,
+        "min": 0,
+        "max": 100,
+        "sensor_keys": ("webbox_feed_soc_lower",),
+    },
+    "power_setpoint_timeout": {
+        "address": 41195,
+        "min": 0,
+        "max": 86400,
+        "sensor_keys": ("webbox_power_setpoint_timeout",),
+    },
+}
+
+
+def _resolve_si_write_value(param: str, value: Any) -> int:
+    """Resolve friendly / numeric value → U32 holding register payload."""
+    spec = SI_WRITE_PARAMS.get(param)
+    if not spec:
+        raise ValueError(
+            f"Unknown SI parameter {param!r}; "
+            f"use one of {sorted(SI_WRITE_PARAMS)}"
+        )
+    raw = value
+    if isinstance(raw, str):
+        key = raw.strip().lower().replace(" ", "_").replace("-", "_")
+        vmap = spec.get("value_map") or {}
+        if key in vmap:
+            return int(vmap[key])
+        # numeric string
+        try:
+            raw = float(key) if "." in key else int(key)
+        except ValueError as err:
+            raise ValueError(
+                f"Invalid value {value!r} for {param}; "
+                f"options={sorted(vmap) if vmap else 'number'}"
+            ) from err
+    code = int(raw)
+    if "min" in spec and code < int(spec["min"]):
+        raise ValueError(f"{param} must be ≥ {spec['min']}")
+    if "max" in spec and code > int(spec["max"]):
+        raise ValueError(f"{param} must be ≤ {spec['max']}")
+    return code & 0xFFFFFFFF
+
+
+def apply_si_parameter_optimistic(
+    values: dict[str, Any], param: str, code: int
+) -> None:
+    """Update runtime sensor bag after a successful write."""
+    if param == "grid_control":
+        # reuse grid control labels
+        for opt, val in GRID_CONTROL_OPTIONS.items():
+            if val == code:
+                values["webbox_grid_control_option"] = opt
+                values["webbox_grid_control_code"] = code
+                values["webbox_grid_control"] = GRID_CONTROL_LABELS.get(code, str(code))
+                return
+    if param == "reverse_feed":
+        values["webbox_reverse_feed_code"] = code
+        values["webbox_reverse_feed"] = reverse_feed_label(code) or str(code)
+        return
+    if param == "power_setpoint_mode":
+        values["webbox_power_setpoint_mode_code"] = code
+        values["webbox_power_setpoint_mode"] = (
+            power_setpoint_mode_label(code) or str(code)
+        )
+        return
+    if param == "discharge_limit":
+        values["webbox_discharge_limit"] = code
+        return
+    if param == "feed_soc_upper":
+        values["webbox_feed_soc_upper"] = code
+        return
+    if param == "feed_soc_lower":
+        values["webbox_feed_soc_lower"] = code
+        return
+    if param == "power_setpoint_timeout":
+        values["webbox_power_setpoint_timeout"] = code
+        return
+
+
+async def async_write_si_parameter(
+    host: str,
+    param: str,
+    value: Any,
+    *,
+    port: int = 502,
+    unit_device: int = 3,
+) -> tuple[bool, int]:
+    """Write one SI parameter via Modbus FC16. Returns (ok, raw_code)."""
+    param_key = (param or "").strip().lower().replace(" ", "_").replace("-", "_")
+    # aliases
+    aliases = {
+        "grid": "grid_control",
+        "gdmanstr": "grid_control",
+        "reverse": "reverse_feed",
+        "feed_in": "reverse_feed",
+        "setpoint_mode": "power_setpoint_mode",
+        "sp_mode": "power_setpoint_mode",
+        "discharge": "discharge_limit",
+        "self_consumption": "discharge_limit",
+        "feed_upper": "feed_soc_upper",
+        "feed_lower": "feed_soc_lower",
+        "sp_timeout": "power_setpoint_timeout",
+        "setpoint_timeout": "power_setpoint_timeout",
+    }
+    param_key = aliases.get(param_key, param_key)
+    if param_key == "grid_control":
+        # Dedicated writer accepts friendly aliases (start/auto/off/…)
+        mode = str(value).strip().lower().replace(" ", "_")
+        code = _resolve_si_write_value("grid_control", value)
+        ok = await async_write_grid_control(
+            host, mode, port=port, unit_device=unit_device
+        )
+        return ok, code
+
+    code = _resolve_si_write_value(param_key, value)
+    address = int(SI_WRITE_PARAMS[param_key]["address"])
+    client = AsyncModbusTcp(host, port=port)
+    ok = await client.write_holding_u32(unit_device, address, code)
+    if ok:
+        _LOGGER.info(
+            "WebBox SI param %s → %s (addr %s) on %s unit %s",
+            param_key,
+            code,
+            address,
+            host,
+            unit_device,
+        )
+    else:
+        _LOGGER.warning(
+            "WebBox SI param write failed %s=%s host=%s unit=%s addr=%s",
+            param_key,
+            code,
+            host,
+            unit_device,
+            address,
+        )
+    return ok, code

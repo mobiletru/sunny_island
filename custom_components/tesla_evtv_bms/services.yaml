@@ -31,3 +31,47 @@ set_grid_control:
       required: false
       selector:
         text:
+
+set_si_parameter:
+  name: Set Sunny Island parameter
+  description: >
+    Write a Sunny Island / WebBox Modbus parameter (unit 3). Used by the plant
+    app parameter buttons. Parameters: grid_control, reverse_feed,
+    power_setpoint_mode, discharge_limit, feed_soc_upper, feed_soc_lower,
+    power_setpoint_timeout. grid_control also tries RPC SetParameter GdManStr.
+  fields:
+    parameter:
+      name: Parameter
+      description: SI parameter id
+      required: true
+      example: reverse_feed
+      selector:
+        select:
+          options:
+            - grid_control
+            - reverse_feed
+            - power_setpoint_mode
+            - discharge_limit
+            - feed_soc_upper
+            - feed_soc_lower
+            - power_setpoint_timeout
+    value:
+      name: Value
+      description: >
+        Enum option (yes/no, off/manual_w/manual_pct/external, manual_on/automatic)
+        or integer (limits 0–100, timeout seconds)
+      required: true
+      example: "yes"
+      selector:
+        text:
+    entity_prefix:
+      name: Entity prefix
+      required: false
+      example: battery_storage_tesla_pack
+      selector:
+        text:
+    name:
+      name: Pack name
+      required: false
+      selector:
+        text:

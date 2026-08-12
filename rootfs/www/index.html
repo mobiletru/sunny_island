@@ -184,36 +184,20 @@
             <div class="tile" data-metric="webboxApparent"><span class="tile-l">Apparent</span><span class="metric-value">—</span></div>
           </div>
 
-          <div class="section-label">SUNNY ISLAND · PARAMETERS</div>
-          <div class="tile-grid">
-            <div class="tile" data-metric="webboxDischargeLimit"><span class="tile-l">Discharge limit</span><span class="metric-value">—</span></div>
-            <div class="tile" data-metric="webboxReverseFeed"><span class="tile-l">Reverse feed</span><span class="metric-value">—</span></div>
-            <div class="tile" data-metric="webboxFeedSocUpper"><span class="tile-l">Feed SoC upper</span><span class="metric-value">—</span></div>
-            <div class="tile" data-metric="webboxFeedSocLower"><span class="tile-l">Feed SoC lower</span><span class="metric-value">—</span></div>
-            <div class="tile" data-metric="webboxPowerSpMode"><span class="tile-l">Setpoint mode</span><span class="metric-value">—</span></div>
-            <div class="tile" data-metric="webboxPowerSpTimeout"><span class="tile-l">Setpoint timeout</span><span class="metric-value">—</span></div>
-            <div class="tile" data-metric="webboxOpStatus"><span class="tile-l">Operating</span><span class="metric-value">—</span></div>
-            <div class="tile" data-metric="webboxGenStatus"><span class="tile-l">Generator</span><span class="metric-value">—</span></div>
-          </div>
-          <p class="protect-note">SI parameters · Modbus unit 3 · limits 31009 / 40705–40707 · reverse feed 40679 · setpoint mode 40210</p>
+          <div class="section-label">ALL PARAMETERS · BUTTONS</div>
+          <div id="param-panel" class="param-panel" aria-label="Sunny Island parameters"></div>
+          <p class="protect-note">
+            Writable buttons call <b>tesla_evtv_bms.set_si_parameter</b> (Modbus unit 3) ·
+            Grid control uses RPC <b>GdManStr</b> first · green/blue/red = write · grey = live readout
+          </p>
 
-          <div class="section-label">GRID START · WEBBOX</div>
-          <div class="tile-grid">
-            <div class="tile" data-metric="webboxGridControl"><span class="tile-l">Control mode</span><span class="metric-value">—</span></div>
-            <div class="tile" data-metric="webboxGridConnTime"><span class="tile-l">Start timer</span><span class="metric-value">—</span></div>
-            <div class="tile" data-metric="webboxOpStatus"><span class="tile-l">Operating</span><span class="metric-value">—</span></div>
-            <div class="tile" data-metric="webboxGenStatus"><span class="tile-l">Generator</span><span class="metric-value">—</span></div>
-            <div class="tile" data-metric="webboxRelay"><span class="tile-l">Grid relay</span><span class="metric-value">—</span></div>
-            <div class="tile" data-metric="webboxGridV"><span class="tile-l">Grid V</span><span class="metric-value">—</span></div>
-          </div>
+          <!-- Legacy quick actions (also in parameter panel) -->
+          <div class="section-label">QUICK · GRID + TESSIE</div>
           <div class="action-row grid-start-row">
             <button type="button" id="grid-start-btn" class="btn-ok" data-grid-mode="manual_on">Start grid</button>
             <button type="button" id="grid-auto-btn" class="btn-secondary" data-grid-mode="automatic">Automatic</button>
             <button type="button" id="grid-off-btn" class="btn-danger" data-grid-mode="off">Control off</button>
           </div>
-          <p class="protect-note">Grid control · WebBox <b>SetParameter GdManStr</b> (Start / Auto / Stop) · Modbus 40527 fallback · Manual On = request grid · SI may still enforce SoC / voltage locks</p>
-
-          <div class="section-label">TESSIE · CHARGE</div>
           <div class="action-row">
             <button id="start-charger-main" class="btn-ok">Start charging</button>
             <button id="stop-charger-main" class="btn-danger">Stop charging</button>

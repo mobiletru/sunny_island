@@ -80,7 +80,11 @@ WEBBOX_SENSOR_KEYS = (
 
 # Service: tesla_evtv_bms.set_grid_control
 SERVICE_SET_GRID_CONTROL = "set_grid_control"
+# Service: tesla_evtv_bms.set_si_parameter — write SI Modbus params from plant UI
+SERVICE_SET_SI_PARAMETER = "set_si_parameter"
 ATTR_MODE = "mode"
+ATTR_PARAMETER = "parameter"
+ATTR_VALUE = "value"
 ATTR_DEVICE_ID = "device_id"
 ATTR_ENTRY_ID = "entry_id"
 
