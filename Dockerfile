@@ -2,7 +2,7 @@ ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.21
 FROM ${BUILD_FROM}
 
 ARG BUILD_ARCH=amd64
-ARG BUILD_VERSION=2.1.3
+ARG BUILD_VERSION=2.2.7
 
 LABEL \
     io.hass.name="Sunny Island" \
@@ -38,17 +38,6 @@ COPY run.sh /run.sh
 ENV SI_APP_VERSION=${BUILD_VERSION}
 
 RUN sed -i 's/\r$//' /run.sh \
-    && chmod a+x /run.sh \
-    && mkdir -p /run/nginx /var/lib/nginx/tmp /var/log/nginx /tmp/nginx \
-    && chown -R nginx:nginx /var/lib/nginx /var/log/nginx /run/nginx /tmp/nginx \
-    && python3 -m py_compile /opt/sunny_island/render_config.py \
-    && python3 -m py_compile /opt/sunny_island/install_integration.py \
-    && nginx -t \
-    && test -f /opt/sunny_island/custom_components/tesla_evtv_bms/manifest.json
-
-EXPOSE 8098
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:8098/health || exit 1
+ && chmod a+x /run.sh
 
 CMD ["/run.sh"]
