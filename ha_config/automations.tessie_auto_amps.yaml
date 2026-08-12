@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------
 # Auto Tessie charge current from EVTV BMS
 # Primary: sensor.*_tcch_amps (BMS charge current command)
-# Safety: lowest cell, SoC, charge_enable, highest cell taper, pack discharge
+# Safety: lowest cell, SoC, highest cell taper, pack discharge soft limit
 # Toggle: input_boolean.auto_tessie_amps  ·  Cap: input_number.tessie_amps_cap
 # ---------------------------------------------------------------------------
 - id: tessie_auto_amps_from_bms
@@ -10,10 +10,10 @@
     While the car is charging (or charge switch is on), set number.x_charge_current
     from pack TCCH amps with BMS safety clamps. Disabled when auto_tessie_amps is off.
   mode: queued
-  max: 2
+  max: 3
   max_exceeded: silent
   triggers:
-    # Avoid every BMS frame — TCCH + charge state + 1 min is enough
+    # TCCH + charge session only (avoid every cell UDP tick)
     - trigger: state
       entity_id:
         - sensor.battery_storage_tesla_pack_tcch_amps
@@ -21,6 +21,8 @@
         - sensor.x_charging
         - input_boolean.auto_tessie_amps
         - input_number.tessie_amps_cap
+        - input_boolean.car_charger
+    # Re-apply every minute while charging (Tessie can drift / ignore writes)
     - trigger: time_pattern
       minutes: "/1"
     - trigger: homeassistant
@@ -29,7 +31,7 @@
     - condition: state
       entity_id: input_boolean.auto_tessie_amps
       state: "on"
-    # Car actively charging (or plant flag on). Case-insensitive charge status.
+    # Active charge session (switch, plant flag, or live charge status)
     - condition: or
       conditions:
         - condition: state
@@ -40,7 +42,8 @@
           state: "on"
         - condition: template
           value_template: >-
-            {{ states('sensor.x_charging') | lower in ['charging', 'starting'] }}
+            {{ states('sensor.x_charging') | lower in
+               ['charging', 'starting'] }}
   actions:
     - action: script.set_tessie_amps_from_bms
       continue_on_error: true
