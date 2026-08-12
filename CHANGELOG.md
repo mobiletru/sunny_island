@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.9
+
+- **Wrench · Quirks:** 🔧 drawer on plant UI — toggle auto Tessie amps, amps cap, pack/cell stop thresholds, car charger flag; show automation on/off; one-tap enable plant automations + run auto amps now
+
 ## 2.2.8
 
 - **Plant UI:** **all parameters as buttons** — full control panel for grid, reverse feed, power setpoint mode, discharge / feed SoC limits, setpoint timeout, Tessie charge, plus live readout buttons (pack, SI, solar, car)

@@ -38,6 +38,7 @@
       <div class="topbar-actions">
         <span id="connection-status" class="connection-pill" data-status="disconnected">Offline</span>
         <div class="settings-wrap">
+          <button id="quirks-btn" class="icon-btn" aria-label="Wrench quirks" title="Wrench · Quirks">🔧</button>
           <button id="settings-btn" class="icon-btn" aria-label="Settings">⚙</button>
           <div id="settings-panel" class="settings-panel">
             <button id="grid-start-menu-btn" class="btn-ok-sm" data-grid-mode="manual_on">Start grid (WebBox)</button>
@@ -50,6 +51,25 @@
         </div>
       </div>
     </header>
+
+    <!-- Wrench · Quirks drawer -->
+    <div id="quirks-overlay" class="quirks-overlay hidden" aria-hidden="true">
+      <div class="quirks-drawer" role="dialog" aria-labelledby="quirks-title">
+        <div class="quirks-header">
+          <div>
+            <h2 id="quirks-title">🔧 Wrench · Quirks</h2>
+            <p class="quirks-sub">Plant workarounds · Tessie auto amps · pack stop thresholds</p>
+          </div>
+          <button type="button" id="quirks-close" class="icon-btn" aria-label="Close">✕</button>
+        </div>
+        <div id="quirks-body" class="quirks-body"></div>
+        <div class="quirks-footer">
+          <button type="button" id="quirks-run-amps" class="btn-secondary">Run auto amps now</button>
+          <button type="button" id="quirks-enable-autos" class="btn-ok">Enable plant automations</button>
+        </div>
+        <p class="quirks-note">Writes HA helpers live. Automations must stay <b>on</b> for auto amps / pack stop.</p>
+      </div>
+    </div>
 
     <div id="fault-banner" class="fault-banner hidden" role="alert"></div>
 

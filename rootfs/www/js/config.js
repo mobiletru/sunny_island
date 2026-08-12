@@ -442,8 +442,96 @@ const GROUPS = [
   { id: 'si', title: 'Sunny Island parameters' },
 ];
 
+/**
+ * Wrench · Quirks — plant workarounds & thresholds (HA helpers).
+ * kind: toggle | number
+ */
+const QUIRKS = [
+  {
+    id: 'auto_tessie_amps',
+    entity: 'input_boolean.auto_tessie_amps',
+    kind: 'toggle',
+    label: 'Auto Tessie amps (from BMS)',
+    hint: 'While charging, set car A from TCCH + safety clamps',
+  },
+  {
+    id: 'tessie_amps_cap',
+    entity: 'input_number.tessie_amps_cap',
+    kind: 'number',
+    label: 'Tessie amps cap',
+    unit: 'A',
+    min: 0,
+    max: 48,
+    step: 1,
+    hint: 'Hard ceiling for auto amps',
+  },
+  {
+    id: 'stop_on_pack_v',
+    entity: 'input_boolean.tessie_stop_on_pack_volts',
+    kind: 'toggle',
+    label: 'Stop charge on low pack V',
+    hint: 'Pack protection uses this toggle',
+  },
+  {
+    id: 'stop_pack_v',
+    entity: 'input_number.tessie_stop_pack_volts',
+    kind: 'number',
+    label: 'Stop below pack V',
+    unit: 'V',
+    min: 30,
+    max: 50,
+    step: 0.1,
+    hint: '12S default 38.4 V ≈ 3.2 V/cell',
+  },
+  {
+    id: 'stop_on_cell_v',
+    entity: 'input_boolean.tessie_stop_on_cell_volts',
+    kind: 'toggle',
+    label: 'Stop charge on low cell V',
+    hint: 'Lowest / trigger cell hard stop',
+  },
+  {
+    id: 'stop_cell_v',
+    entity: 'input_number.tessie_stop_cell_volts',
+    kind: 'number',
+    label: 'Stop below cell V',
+    unit: 'V',
+    min: 2.8,
+    max: 3.6,
+    step: 0.01,
+    hint: 'Default 3.2 V',
+  },
+  {
+    id: 'stop_soc',
+    entity: 'input_number.tessie_stop_soc',
+    kind: 'number',
+    label: 'Stop below pack SoC',
+    unit: '%',
+    min: 0,
+    max: 50,
+    step: 1,
+    hint: 'Default 15%',
+  },
+  {
+    id: 'car_charger_flag',
+    entity: 'input_boolean.car_charger',
+    kind: 'toggle',
+    label: 'Car charger flag',
+    hint: 'Synced with switch.x_charge (plant automations)',
+  },
+];
+
 function getAllEntityIds() {
   const ids = Object.values(METRICS).map((m) => m.entity);
   ids.push(gridControlSelectId());
+  if (typeof QUIRKS !== 'undefined') {
+    QUIRKS.forEach((q) => ids.push(q.entity));
+  }
+  // Automations so wrench can show on/off
+  ids.push(
+    'automation.tessie_auto_amps_from_evtv_bms',
+    'automation.evtv_bms_voltage_stop_tessie_charging',
+    'automation.sync_car_charger_flag_with_x_charge'
+  );
   return [...new Set(ids)];
 }

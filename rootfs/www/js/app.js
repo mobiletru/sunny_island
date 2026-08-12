@@ -17,9 +17,11 @@
     $('#year').textContent = new Date().getFullYear();
     initRingArcs();
     renderParamPanel();
+    renderQuirksPanel();
     renderMetricPlaceholders();
     bindAuth();
     bindSettings();
+    bindQuirks();
     bindChargerButtons();
     bindGridStartButtons();
     bindParamPanel();
@@ -65,6 +67,7 @@
 
   function bindSettings() {
     $('#settings-btn').addEventListener('click', () => {
+      closeQuirks();
       $('#settings-panel').classList.toggle('open');
     });
     document.addEventListener('click', (e) => {
@@ -72,6 +75,190 @@
         $('#settings-panel').classList.remove('open');
       }
     });
+  }
+
+  function openQuirks() {
+    $('#settings-panel')?.classList.remove('open');
+    const ov = $('#quirks-overlay');
+    if (!ov) return;
+    ov.classList.remove('hidden');
+    ov.setAttribute('aria-hidden', 'false');
+    updateQuirksPanel();
+  }
+
+  function closeQuirks() {
+    const ov = $('#quirks-overlay');
+    if (!ov) return;
+    ov.classList.add('hidden');
+    ov.setAttribute('aria-hidden', 'true');
+  }
+
+  function renderQuirksPanel() {
+    const body = $('#quirks-body');
+    if (!body || typeof QUIRKS === 'undefined') return;
+    body.innerHTML = QUIRKS.map((q) => {
+      if (q.kind === 'toggle') {
+        return `
+          <div class="quirk-row" data-quirk="${q.id}">
+            <div class="quirk-meta">
+              <span class="quirk-label">${q.label}</span>
+              <span class="quirk-hint">${q.hint || ''}</span>
+            </div>
+            <button type="button" class="quirk-toggle" data-quirk-id="${q.id}" aria-pressed="false">
+              <span class="quirk-toggle-knob"></span>
+              <span class="quirk-toggle-text">off</span>
+            </button>
+          </div>`;
+      }
+      return `
+        <div class="quirk-row" data-quirk="${q.id}">
+          <div class="quirk-meta">
+            <span class="quirk-label">${q.label}</span>
+            <span class="quirk-hint">${q.hint || ''}</span>
+          </div>
+          <div class="quirk-num">
+            <button type="button" class="param-btn btn-ghost-sm" data-quirk-id="${q.id}" data-quirk-step="-">−</button>
+            <span class="quirk-value" id="quirk-val-${q.id}">—</span>
+            <button type="button" class="param-btn btn-ghost-sm" data-quirk-id="${q.id}" data-quirk-step="+">+</button>
+          </div>
+        </div>`;
+    }).join('') + `
+      <div class="quirk-row quirk-status-row">
+        <div class="quirk-meta">
+          <span class="quirk-label">Plant automations</span>
+          <span class="quirk-hint" id="quirk-auto-status">—</span>
+        </div>
+      </div>`;
+  }
+
+  function bindQuirks() {
+    $('#quirks-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const ov = $('#quirks-overlay');
+      if (ov?.classList.contains('hidden')) openQuirks();
+      else closeQuirks();
+    });
+    $('#quirks-close')?.addEventListener('click', closeQuirks);
+    $('#quirks-overlay')?.addEventListener('click', (e) => {
+      if (e.target.id === 'quirks-overlay') closeQuirks();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeQuirks();
+    });
+
+    $('#quirks-body')?.addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-quirk-id]');
+      if (!btn) return;
+      const q = (QUIRKS || []).find((x) => x.id === btn.dataset.quirkId);
+      if (!q || !client) {
+        toast('Connect to Home Assistant first', 'error');
+        return;
+      }
+      try {
+        if (q.kind === 'toggle') {
+          const on = (client.getState(q.entity)?.state || '') === 'on';
+          await client.callService(
+            'input_boolean',
+            on ? 'turn_off' : 'turn_on',
+            {},
+            { entity_id: q.entity }
+          );
+          toast(`${q.label} → ${on ? 'off' : 'on'}`, 'success');
+        } else if (q.kind === 'number' && btn.dataset.quirkStep) {
+          const cur = parseFloat(client.getState(q.entity)?.state);
+          let next = Number.isFinite(cur) ? cur : 0;
+          const step = Number(q.step) || 1;
+          next = btn.dataset.quirkStep === '+' ? next + step : next - step;
+          if (q.min != null) next = Math.max(q.min, next);
+          if (q.max != null) next = Math.min(q.max, next);
+          // honor step precision
+          const decimals = String(step).includes('.') ? String(step).split('.')[1].length : 0;
+          next = Number(next.toFixed(decimals));
+          await client.callService(
+            'input_number',
+            'set_value',
+            { value: next },
+            { entity_id: q.entity }
+          );
+          toast(`${q.label} → ${next}${q.unit ? ' ' + q.unit : ''}`, 'success');
+        }
+      } catch (err) {
+        toast(err.message || 'Quirk write failed', 'error');
+      }
+    });
+
+    $('#quirks-run-amps')?.addEventListener('click', async () => {
+      if (!client) {
+        toast('Connect first', 'error');
+        return;
+      }
+      try {
+        await client.callService('script', 'set_tessie_amps_from_bms');
+        toast('Auto amps script ran', 'success');
+      } catch (err) {
+        toast(err.message || 'Auto amps failed', 'error');
+      }
+    });
+
+    $('#quirks-enable-autos')?.addEventListener('click', async () => {
+      if (!client) {
+        toast('Connect first', 'error');
+        return;
+      }
+      const list = [
+        'automation.tessie_auto_amps_from_evtv_bms',
+        'automation.evtv_bms_voltage_stop_tessie_charging',
+        'automation.evtv_bms_voltage_approaching_stop_warn',
+        'automation.sync_car_charger_flag_with_x_charge',
+      ];
+      try {
+        for (const entity_id of list) {
+          await client.callService('automation', 'turn_on', {}, { entity_id });
+        }
+        toast('Plant automations enabled', 'success');
+        updateQuirksPanel();
+      } catch (err) {
+        toast(err.message || 'Could not enable automations', 'error');
+      }
+    });
+  }
+
+  function updateQuirksPanel() {
+    if (!client || typeof QUIRKS === 'undefined') return;
+    QUIRKS.forEach((q) => {
+      const st = client.getState(q.entity);
+      const raw = st?.state;
+      if (q.kind === 'toggle') {
+        const on = raw === 'on';
+        const btn = document.querySelector(`.quirk-toggle[data-quirk-id="${q.id}"]`);
+        if (btn) {
+          btn.classList.toggle('is-on', on);
+          btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+          const t = btn.querySelector('.quirk-toggle-text');
+          if (t) t.textContent = on ? 'on' : 'off';
+        }
+      } else {
+        const el = document.getElementById(`quirk-val-${q.id}`);
+        if (el) {
+          if (raw == null || BAD_STATES.has(String(raw).toLowerCase())) el.textContent = '—';
+          else el.textContent = `${raw}${q.unit ? ' ' + q.unit : ''}`;
+        }
+      }
+    });
+    const autoEl = $('#quirk-auto-status');
+    if (autoEl) {
+      const names = [
+        ['amps', 'automation.tessie_auto_amps_from_evtv_bms'],
+        ['pack stop', 'automation.evtv_bms_voltage_stop_tessie_charging'],
+        ['sync', 'automation.sync_car_charger_flag_with_x_charge'],
+      ];
+      autoEl.textContent = names
+        .map(([label, eid]) => {
+          const s = client.getState(eid)?.state || '?';
+          return `${label}: ${s}`;
+        })
+        .join(' · ');
+    }
   }
 
   function bindChargerButtons() {
@@ -618,6 +805,7 @@
 
     updateGridStartButtons();
     updateParamPanel();
+    updateQuirksPanel();
     drawSparkline();
   }
 
