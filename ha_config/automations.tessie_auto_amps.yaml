@@ -29,17 +29,18 @@
     - condition: state
       entity_id: input_boolean.auto_tessie_amps
       state: "on"
+    # Car actively charging (or plant flag on). Case-insensitive charge status.
     - condition: or
       conditions:
         - condition: state
           entity_id: switch.x_charge
           state: "on"
         - condition: state
-          entity_id: sensor.x_charging
-          state: charging
-        - condition: state
           entity_id: input_boolean.car_charger
           state: "on"
+        - condition: template
+          value_template: >-
+            {{ states('sensor.x_charging') | lower in ['charging', 'starting'] }}
   actions:
     - action: script.set_tessie_amps_from_bms
       continue_on_error: true

@@ -16,6 +16,8 @@ import json
 import os
 import shutil
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 OPTIONS_PATH = Path(os.environ.get("SI_OPTIONS", "/data/options.json"))
@@ -410,6 +412,49 @@ def _install_packages() -> list[str]:
     return actions
 
 
+# Entity IDs HA generates from our automation aliases (must stay enabled).
+APP_AUTOMATION_ENTITIES = (
+    "automation.tessie_auto_amps_from_evtv_bms",
+    "automation.evtv_bms_voltage_stop_tessie_charging",
+    "automation.evtv_bms_voltage_approaching_stop_warn",
+    "automation.sync_car_charger_flag_with_x_charge",
+)
+
+
+def _ha_token() -> str:
+    return (
+        os.environ.get("SUPERVISOR_TOKEN")
+        or os.environ.get("HASSIO_TOKEN")
+        or ""
+    ).strip()
+
+
+def _enable_app_automations() -> list[str]:
+    """Turn on app-managed automations via Core API (they often stay off after reloads)."""
+    token = _ha_token()
+    if not token:
+        return ["skip enable automations (no SUPERVISOR_TOKEN)"]
+    actions: list[str] = []
+    url = "http://supervisor/core/api/services/automation/turn_on"
+    for eid in APP_AUTOMATION_ENTITIES:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps({"entity_id": eid}).encode(),
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                resp.read()
+            actions.append(f"enabled {eid}")
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as exc:
+            actions.append(f"could not enable {eid}: {exc}")
+    return actions
+
+
 def _install_scripts_automations(*, force: bool) -> list[str]:
     """Install car-charger / protection / auto-amps YAML into /config when empty or force.
 
@@ -516,6 +561,15 @@ def main() -> int:
         except OSError as exc:
             errors.append(f"scripts/automations sync failed: {exc}")
             print(f"[sunny_island] ERROR: {errors[-1]}")
+
+        # Keep plant automations ON (HA often leaves them disabled after YAML reload)
+        try:
+            for msg in _enable_app_automations():
+                actions.append(msg)
+                print(f"[sunny_island] {msg}")
+        except Exception as exc:  # noqa: BLE001
+            actions.append(f"enable automations failed: {exc}")
+            print(f"[sunny_island] WARN: {actions[-1]}")
 
         if SRC_EXAMPLES.is_dir():
             try:
