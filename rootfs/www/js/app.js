@@ -332,6 +332,25 @@
     $('#shutdown-charger-btn')?.addEventListener('click', stop);
     $('#start-charger-main')?.addEventListener('click', start);
     $('#stop-charger-main')?.addEventListener('click', stop);
+
+    const matchEvtv = async () => {
+      if (!client) {
+        toast('Connect to Home Assistant first', 'error');
+        return;
+      }
+      try {
+        toast('Match EVTV charge rate → Tessie…', 'info');
+        await client.callService('script', 'start_evtv_matched_charge');
+        const tcch = client.getState(METRICS.evtvTcch?.entity)?.state;
+        const amps = client.getState('number.x_charge_current')?.state;
+        toast(`EVTV ${tcch ?? '—'} A → Tessie ${amps ?? '—'} A`, 'success');
+      } catch (err) {
+        toast(err.message || 'EVTV match charge failed', 'error');
+      }
+    };
+    $('#evtv-match-charge-btn')?.addEventListener('click', matchEvtv);
+    // param panel action
+    window.__siMatchEvtvCharge = matchEvtv;
   }
 
   /** Build full parameter-as-buttons panel from PARAM_CONTROLS */
@@ -421,7 +440,12 @@
         toast('Connect to Home Assistant first', 'error');
         return;
       }
-      // Action buttons (Tessie)
+      // Action buttons (Tessie / EVTV match)
+      if (btn.dataset.paramAction === 'match_evtv_charge') {
+        if (typeof window.__siMatchEvtvCharge === 'function') window.__siMatchEvtvCharge();
+        else $('#evtv-match-charge-btn')?.click();
+        return;
+      }
       if (btn.dataset.paramAction === 'start_charge') {
         $('#start-charger-main')?.click();
         return;

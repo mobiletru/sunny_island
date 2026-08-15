@@ -51,6 +51,24 @@ const METRICS = {
   carCharge: { entity: 'switch.x_charge', label: 'Tessie Charge Switch', format: 'text', group: 'safety' },
   carStatus: { entity: 'sensor.x_charging', label: 'Tessie Charge Status', format: 'text', group: 'safety' },
   carBattery: { entity: 'sensor.x_battery_level', label: 'Car Battery %', format: 'percent', group: 'safety' },
+  evtvTcch: {
+    entity: pack('tcch_amps'),
+    label: 'EVTV charge rate (TCCH)',
+    format: 'amps',
+    group: 'safety',
+  },
+  tessieAmps: {
+    entity: 'number.x_charge_current',
+    label: 'Tessie charge amps',
+    format: 'amps',
+    group: 'safety',
+  },
+  matchEvtv: {
+    entity: 'input_boolean.match_evtv_charge_amps',
+    label: 'Match EVTV→Tessie',
+    format: 'text',
+    group: 'safety',
+  },
   carSessionKwh: { entity: 'sensor.x_charge_energy_added', label: 'Session kWh Added', format: 'energy', group: 'tessie' },
   carEnergyRem: { entity: 'sensor.x_energy_remaining', label: 'Car Energy Remaining', format: 'energy', group: 'tessie' },
   carLifetimeKwh: { entity: 'sensor.x_lifetime_energy_used', label: 'Lifetime kWh Used', format: 'energy', group: 'tessie' },
@@ -269,7 +287,8 @@ const PARAM_CONTROLS = [
     metric: 'carStatus',
     kind: 'action',
     options: [
-      { value: 'start', label: 'Start charging', cls: 'btn-ok', action: 'start_charge' },
+      { value: 'match', label: 'Match EVTV amps + charge', cls: 'btn-ok', action: 'match_evtv_charge' },
+      { value: 'start', label: 'Start charging', cls: 'btn-secondary', action: 'start_charge' },
       { value: 'stop', label: 'Stop charging', cls: 'btn-danger', action: 'stop_charge' },
     ],
   },
@@ -448,11 +467,18 @@ const GROUPS = [
  */
 const QUIRKS = [
   {
+    id: 'match_evtv_charge_amps',
+    entity: 'input_boolean.match_evtv_charge_amps',
+    kind: 'toggle',
+    label: 'Match EVTV charge amps → Tessie',
+    hint: 'Always set Tessie A = floor(EVTV TCCH), including 0 A',
+  },
+  {
     id: 'auto_tessie_amps',
     entity: 'input_boolean.auto_tessie_amps',
     kind: 'toggle',
     label: 'Auto Tessie amps (from BMS)',
-    hint: 'While charging, set car A from TCCH + safety clamps',
+    hint: 'While charging, keep Tessie A matched to EVTV rate',
   },
   {
     id: 'tessie_amps_cap',
@@ -463,7 +489,7 @@ const QUIRKS = [
     min: 0,
     max: 48,
     step: 1,
-    hint: 'Hard ceiling for auto amps',
+    hint: 'Hard ceiling for matched amps',
   },
   {
     id: 'stop_on_pack_v',

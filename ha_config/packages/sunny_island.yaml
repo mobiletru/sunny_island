@@ -9,6 +9,11 @@ input_boolean:
     name: Auto Tessie amps (from BMS)
     icon: mdi:current-ac
     initial: true
+  # When on: Tessie charge amps always track EVTV TCCH (including 0 A)
+  match_evtv_charge_amps:
+    name: Match EVTV charge amps → Tessie
+    icon: mdi:sync
+    initial: true
   tessie_stop_on_pack_volts:
     name: Stop Tessie on low pack V
     icon: mdi:battery-alert

@@ -414,6 +414,7 @@ def _install_packages() -> list[str]:
 
 # Entity IDs HA generates from our automation aliases (must stay enabled).
 APP_AUTOMATION_ENTITIES = (
+    "automation.tessie_match_evtv_charge_amps",
     "automation.tessie_auto_amps_from_evtv_bms",
     "automation.evtv_bms_voltage_stop_tessie_charging",
     "automation.evtv_bms_voltage_approaching_stop_warn",

@@ -219,10 +219,21 @@
             <button type="button" id="grid-off-btn" class="btn-danger" data-grid-mode="off">Control off</button>
           </div>
           <div class="action-row">
-            <button id="start-charger-main" class="btn-ok">Start charging</button>
+            <button type="button" id="evtv-match-charge-btn" class="btn-ok">Match EVTV amps + charge</button>
+            <button id="start-charger-main" class="btn-secondary">Start charging</button>
             <button id="stop-charger-main" class="btn-danger">Stop charging</button>
           </div>
-          <p class="protect-note">Protection · cell ≤ 3.2 V · SoC ≤ 15% · |pack A| ≥ 300 → stop car charge · − discharge · + charge</p>
+          <div class="tile-grid" style="margin-top:0.5rem">
+            <div class="tile" data-metric="evtvTcch"><span class="tile-l">EVTV charge rate</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="tessieAmps"><span class="tile-l">Tessie amps</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="carStatus"><span class="tile-l">Charge status</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="matchEvtv"><span class="tile-l">Match EVTV</span><span class="metric-value">—</span></div>
+          </div>
+          <p class="protect-note">
+            <b>Match EVTV amps</b> = Tessie A ← floor(<code>tcch_amps</code>).
+            TCCH <b>0 A</b> → Tessie 0. Pack current ≤ <b>−10 A</b> (discharge) → <b>no match</b>, Tessie 0.
+          </p>
+
 
           <div class="card spark-card">
             <h2 class="card-title">Pack power trend</h2>

@@ -2,11 +2,11 @@ set_tessie_amps_from_bms:
   alias: Set Tessie amps from EVTV BMS
   icon: mdi:current-ac
   description: >
-    Compute target charge amps from EVTV BMS TCCH + safety clamps and apply to
-    number.x_charge_current. Uses namespace() so Jinja if-scopes do not drop clamps.
-    Cap: input_number.tessie_amps_cap (default 32 A).
+    Set number.x_charge_current to match EVTV TCCH charge-rate amps (floor),
+    capped by input_number.tessie_amps_cap. When TCCH is 0, Tessie amps = 0.
+    Optional light safety clamps (low cell / SoC / high cell).
   mode: queued
-  max: 3
+  max: 5
   max_exceeded: silent
   sequence:
     - variables:
@@ -16,64 +16,46 @@ set_tessie_amps_from_bms:
         target: >-
           {% set bad = ['unavailable','unknown','none',''] %}
           {% set tcch_s = states('sensor.battery_storage_tesla_pack_tcch_amps') %}
+          {% set pack_a_s = states('sensor.battery_storage_tesla_pack_current') %}
           {% set soc_s = states('sensor.battery_storage_tesla_pack_state_of_charge') %}
           {% set cell_s = states('sensor.battery_storage_tesla_pack_lowest_cell') %}
           {% set hcell_s = states('sensor.battery_storage_tesla_pack_highest_cell') %}
-          {% set pack_a_s = states('sensor.battery_storage_tesla_pack_current') %}
           {% set cap_s = states('input_number.tessie_amps_cap') %}
           {% set tcch = tcch_s | float(0) if tcch_s not in bad else 0 %}
+          {% set pack_a = pack_a_s | float(0) if pack_a_s not in bad else 0 %}
           {% set soc = soc_s | float(50) if soc_s not in bad else 50 %}
           {% set cell = cell_s | float(3.7) if cell_s not in bad else 3.7 %}
           {% set hcell = hcell_s | float(3.7) if hcell_s not in bad else 3.7 %}
-          {% set pack_a = pack_a_s | float(0) if pack_a_s not in bad else 0 %}
           {% set cap = cap_s | float(32) if cap_s not in bad else 32 %}
-          {# namespace so if/elif clamps actually stick (Jinja block scope) #}
+          {# Match EVTV charge-rate (TCCH) only — never pack current (can be −discharge) #}
           {% set ns = namespace(a=[tcch | round(0, 'floor') | int, 0] | max) %}
-          {% if cell <= 3.25 or soc <= 18 %}
+          {# Pack discharging ≥ 10 A (−10 A or more) → do NOT match TCCH; force 0 A #}
+          {% if pack_a <= -10 %}
             {% set ns.a = 0 %}
-          {% elif cell <= 3.35 or soc <= 25 %}
+          {% elif cell <= 3.20 or soc <= 15 %}
+            {% set ns.a = 0 %}
+          {% elif cell <= 3.30 or soc <= 20 %}
             {% set ns.a = [ns.a, 8] | min %}
-          {% elif hcell >= 4.05 %}
+          {% elif hcell >= 4.08 %}
             {% set ns.a = [ns.a, 5] | min %}
-          {% elif hcell >= 4.00 %}
+          {% elif hcell >= 4.02 %}
             {% set ns.a = [ns.a, 12] | min %}
           {% endif %}
-          {# House pack discharging hard while car charges — soft limit #}
-          {% if pack_a < -80 %}
-            {% set ns.a = [ns.a, 8] | min %}
-          {% elif pack_a < -40 %}
-            {% set ns.a = [ns.a, 16] | min %}
-          {% endif %}
-          {% set ns.a = [ns.a, cap | int] | min %}
-          {% set ns.a = [ns.a, 48] | min %}
+          {% set ns.a = [ns.a, cap | int, 48] | min %}
           {{ [ns.a, 0] | max }}
         detail: >-
-          {% set bad = ['unavailable','unknown','none',''] %}
-          TCCH {{ states('sensor.battery_storage_tesla_pack_tcch_amps') }},
-          cell {{ states('sensor.battery_storage_tesla_pack_lowest_cell') }} V,
-          high {{ states('sensor.battery_storage_tesla_pack_highest_cell') }} V,
-          SoC {{ states('sensor.battery_storage_tesla_pack_state_of_charge') }}%,
-          pack {{ states('sensor.battery_storage_tesla_pack_current') }} A,
-          cap {{ states('input_number.tessie_amps_cap') }} A
-    # Wake if car might be asleep (ignore errors when already awake / not home)
+          EVTV TCCH {{ states('sensor.battery_storage_tesla_pack_tcch_amps') }} A,
+          pack {{ states('sensor.battery_storage_tesla_pack_current') }} A
+          → Tessie {{ target | int }} A
+          (no match when pack ≤ −10 A; cap {{ states('input_number.tessie_amps_cap') }} A)
     - if:
-        - condition: or
-          conditions:
-            - condition: state
-              entity_id: switch.x_charge
-              state: "on"
-            - condition: template
-              value_template: >-
-                {{ states('sensor.x_charging') | lower in
-                   ['charging', 'starting', 'stopped', 'complete', 'nopower'] }}
+        - condition: template
+          value_template: >-
+            {{ states('number.x_charge_current') in
+               ['unavailable','unknown','none',''] }}
       then:
-        - continue_on_error: true
-          action: button.press
-          target:
-            entity_id: button.x_wake
-        - delay:
-            milliseconds: 800
-    # Always write (Tessie sometimes ignores no-op / drifts back)
+        - stop: Tessie number.x_charge_current missing
+    # Always write so 0 A is applied when EVTV rate is 0
     - continue_on_error: true
       action: number.set_value
       target:
@@ -83,22 +65,74 @@ set_tessie_amps_from_bms:
     - continue_on_error: true
       action: logbook.log
       data:
-        name: Tessie auto amps
-        message: >-
-          Charge current {{ current_set | int }} A → {{ target | int }} A
-          ({{ detail }})
+        name: EVTV → Tessie amps
+        message: "{{ detail }} (was {{ current_set | int }} A)"
         entity_id: number.x_charge_current
-    # Second write after short settle (Tessie lag)
-    - delay:
-        milliseconds: 1500
+    # TCCH 0 or pack discharging ≤ −10 A → Tessie 0 A and stop charge switch
     - if:
         - condition: template
-          value_template: >-
-            {{ states('number.x_charge_current') | float(-1) | int != target | int }}
+          value_template: "{{ target | int == 0 and is_state('switch.x_charge', 'on') }}"
       then:
+        - continue_on_error: true
+          action: switch.turn_off
+          target:
+            entity_id: switch.x_charge
+        - continue_on_error: true
+          action: logbook.log
+          data:
+            name: EVTV → Tessie amps
+            message: >-
+              Tessie 0 A / charge off
+              (TCCH {{ states('sensor.battery_storage_tesla_pack_tcch_amps') }} A,
+              pack {{ states('sensor.battery_storage_tesla_pack_current') }} A;
+              no match when pack ≤ −10 A)
+            entity_id: switch.x_charge
+
+# One-shot button: enable match mode, sync amps, start charge if EVTV > 0
+start_evtv_matched_charge:
+  alias: Start charge matching EVTV amps
+  icon: mdi:current-ac
+  description: >
+    Turn on Match EVTV→Tessie amps, set Tessie current to EVTV TCCH (0 stays 0),
+    and start charging if EVTV rate > 0.
+  mode: restart
+  sequence:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.match_evtv_charge_amps
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.auto_tessie_amps
+    - action: script.set_tessie_amps_from_bms
+      continue_on_error: true
+    - variables:
+        rate: >-
+          {% set s = states('sensor.battery_storage_tesla_pack_tcch_amps') %}
+          {{ s | float(0) if s not in ['unavailable','unknown','none',''] else 0 }}
+    - if:
+        - condition: template
+          value_template: "{{ rate | float(0) >= 1 }}"
+      then:
+        - action: script.start_car_charger
+          continue_on_error: true
+        - action: script.notify_iphone
+          data:
+            title: "EVTV match charge"
+            message: >-
+              Matching Tessie to EVTV {{ rate }} A
+              (Tessie now {{ states('number.x_charge_current') }} A).
+      else:
         - continue_on_error: true
           action: number.set_value
           target:
             entity_id: number.x_charge_current
           data:
-            value: "{{ target | int }}"
+            value: 0
+        - continue_on_error: true
+          action: switch.turn_off
+          target:
+            entity_id: switch.x_charge
+        - action: script.notify_iphone
+          data:
+            title: "EVTV match charge"
+            message: EVTV charge rate is 0 A — Tessie set to 0 A / charge off.

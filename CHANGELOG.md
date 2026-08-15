@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.10
+
+- **EVTV match charge:** button + automation set Tessie amps = floor(EVTV `tcch_amps`), including **0 A** (stops charge when EVTV rate is 0)
+- Helper `input_boolean.match_evtv_charge_amps`; script `start_evtv_matched_charge`
+
 ## 2.2.9
 
 - **Wrench · Quirks:** 🔧 drawer on plant UI — toggle auto Tessie amps, amps cap, pack/cell stop thresholds, car charger flag; show automation on/off; one-tap enable plant automations + run auto amps now
