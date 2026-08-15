@@ -18,7 +18,17 @@ input_boolean:
   hold_evtv_current:
     name: Hold EVTV pack current (via Tessie amps)
     icon: mdi:gauge
+    initial: false
+  # When on: Tessie amps track Enphase solar production (kW → A)
+  match_enphase_solar:
+    name: Match Enphase solar → Tessie amps
+    icon: mdi:solar-power
     initial: true
+  # If on: only use surplus (production − house load), not full production
+  enphase_surplus_only:
+    name: Enphase surplus only (not full production)
+    icon: mdi:home-export-outline
+    initial: false
   tessie_stop_on_pack_volts:
     name: Stop Tessie on low pack V
     icon: mdi:battery-alert
@@ -49,6 +59,17 @@ input_number:
     initial: -10
     mode: box
     icon: mdi:current-dc
+
+  # EVSE AC volts for solar→amps (US wall connector typically 240 V)
+  tessie_evse_voltage:
+    name: Tessie EVSE voltage
+    min: 100
+    max: 250
+    step: 1
+    unit_of_measurement: V
+    initial: 240
+    mode: box
+    icon: mdi:sine-wave
 
   # Pack bus voltage (12S ≈ 36–50 V). Default 38.4 V ≈ 3.2 V/cell × 12.
   tessie_stop_pack_volts:

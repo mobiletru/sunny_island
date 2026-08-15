@@ -89,6 +89,126 @@ set_tessie_amps_from_bms:
             entity_id: switch.x_charge
 
 # ---------------------------------------------------------------------------
+# Match Tessie charge amps to Enphase solar production (kW coming in)
+# amps = floor( production_kW * 1000 / EVSE_volts ), capped
+# Optional surplus-only: max(0, production − house load)
+# ---------------------------------------------------------------------------
+set_tessie_amps_from_enphase:
+  alias: Set Tessie amps from Enphase solar
+  icon: mdi:solar-power
+  description: >
+    Set number.x_charge_current from Enphase current power production (kW).
+    Converts kW → amps using input_number.tessie_evse_voltage (default 240 V).
+    When production is 0, Tessie amps = 0.
+  mode: queued
+  max: 5
+  max_exceeded: silent
+  sequence:
+    - if:
+        - condition: template
+          value_template: >-
+            {{ states('number.x_charge_current') in
+               ['unavailable','unknown','none',''] }}
+      then:
+        - stop: Tessie number.x_charge_current missing
+    - variables:
+        current_set: >-
+          {{ states('number.x_charge_current') | float(0) | int }}
+        target: >-
+          {% set bad = ['unavailable','unknown','none',''] %}
+          {% set prod_s = states('sensor.envoy_122039004946_current_power_production') %}
+          {% set load_s = states('sensor.envoy_122039004946_current_power_consumption') %}
+          {% set volt_s = states('input_number.tessie_evse_voltage') %}
+          {% set cap_s = states('input_number.tessie_amps_cap') %}
+          {% set prod = prod_s | float(0) if prod_s not in bad else 0 %}
+          {% set load = load_s | float(0) if load_s not in bad else 0 %}
+          {% set volt = volt_s | float(240) if volt_s not in bad else 240 %}
+          {% set cap = cap_s | float(32) if cap_s not in bad else 32 %}
+          {% set volt = [volt, 100] | max %}
+          {# Enphase power is kW #}
+          {% if is_state('input_boolean.enphase_surplus_only', 'on') %}
+            {% set kw = [prod - load, 0] | max %}
+          {% else %}
+            {% set kw = [prod, 0] | max %}
+          {% endif %}
+          {% set amps = (kw * 1000 / volt) | round(0, 'floor') | int %}
+          {% set amps = [amps, 0] | max %}
+          {% set amps = [amps, cap | int] | min %}
+          {{ [amps, 48] | min }}
+        detail: >-
+          Enphase prod {{ states('sensor.envoy_122039004946_current_power_production') }} kW,
+          load {{ states('sensor.envoy_122039004946_current_power_consumption') }} kW,
+          {{ 'surplus' if is_state('input_boolean.enphase_surplus_only', 'on') else 'full production' }}
+          @ {{ states('input_number.tessie_evse_voltage') }} V
+          → Tessie {{ target | int }} A
+    - continue_on_error: true
+      action: number.set_value
+      target:
+        entity_id: number.x_charge_current
+      data:
+        value: "{{ target | int }}"
+    - continue_on_error: true
+      action: logbook.log
+      data:
+        name: Enphase → Tessie amps
+        message: "{{ detail }} (was {{ current_set | int }} A)"
+        entity_id: number.x_charge_current
+    - if:
+        - condition: template
+          value_template: "{{ target | int == 0 and is_state('switch.x_charge', 'on') }}"
+      then:
+        - continue_on_error: true
+          action: switch.turn_off
+          target:
+            entity_id: switch.x_charge
+        - continue_on_error: true
+          action: logbook.log
+          data:
+            name: Enphase → Tessie amps
+            message: Solar production ~0 kW — Tessie 0 A / charge off
+            entity_id: switch.x_charge
+
+# One-shot: enable Enphase match and start charge if solar > 0
+start_enphase_matched_charge:
+  alias: Start charge matching Enphase solar
+  icon: mdi:solar-power
+  description: >
+    Enable match_enphase_solar, set Tessie amps from Enphase production,
+    start charging if computed amps ≥ 1.
+  mode: restart
+  sequence:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.match_enphase_solar
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.hold_evtv_current
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.match_evtv_charge_amps
+    - action: script.set_tessie_amps_from_enphase
+      continue_on_error: true
+    - variables:
+        amps: "{{ states('number.x_charge_current') | float(0) }}"
+    - if:
+        - condition: template
+          value_template: "{{ amps | float(0) >= 1 }}"
+      then:
+        - action: script.start_car_charger
+          continue_on_error: true
+        - action: script.notify_iphone
+          data:
+            title: "Enphase match charge"
+            message: >-
+              Solar {{ states('sensor.envoy_122039004946_current_power_production') }} kW
+              → Tessie {{ states('number.x_charge_current') }} A
+      else:
+        - action: script.notify_iphone
+          data:
+            title: "Enphase match charge"
+            message: Solar too low for charge — Tessie 0 A
+
+# ---------------------------------------------------------------------------
 # Hold EVTV pack current at a setpoint (default −10 A) by trimming Tessie amps.
 # Sign: − discharge · + charge. More Tessie A → more pack discharge (more negative).
 # ---------------------------------------------------------------------------

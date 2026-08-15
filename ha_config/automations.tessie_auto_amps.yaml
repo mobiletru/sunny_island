@@ -1,4 +1,39 @@
 # ---------------------------------------------------------------------------
+# Match Tessie amps to Enphase solar production (kW coming in)
+# Toggle: input_boolean.match_enphase_solar
+# ---------------------------------------------------------------------------
+- id: tessie_match_enphase_solar
+  alias: Tessie match Enphase solar production
+  description: >
+    When Match Enphase solar is on, set Tessie charge amps from Enphase
+    current_power_production (kW → A at EVSE voltage). Solar 0 → Tessie 0.
+  mode: queued
+  max: 5
+  max_exceeded: silent
+  triggers:
+    - trigger: state
+      entity_id:
+        - sensor.envoy_122039004946_current_power_production
+        - sensor.envoy_122039004946_current_power_consumption
+        - input_boolean.match_enphase_solar
+        - input_boolean.enphase_surplus_only
+        - input_number.tessie_evse_voltage
+        - input_number.tessie_amps_cap
+        - switch.x_charge
+        - sensor.x_charging
+    - trigger: time_pattern
+      seconds: "/20"
+    - trigger: homeassistant
+      event: start
+  conditions:
+    - condition: state
+      entity_id: input_boolean.match_enphase_solar
+      state: "on"
+  actions:
+    - action: script.set_tessie_amps_from_enphase
+      continue_on_error: true
+
+# ---------------------------------------------------------------------------
 # Hold EVTV pack current at setpoint (default −10 A) by trimming Tessie amps
 # Toggle: input_boolean.hold_evtv_current
 # Target: input_number.evtv_pack_current_target (− discharge · + charge)
@@ -27,6 +62,9 @@
     - condition: state
       entity_id: input_boolean.hold_evtv_current
       state: "on"
+    - condition: state
+      entity_id: input_boolean.match_enphase_solar
+      state: "off"
     - condition: or
       conditions:
         - condition: state
@@ -70,13 +108,16 @@
     - condition: state
       entity_id: input_boolean.hold_evtv_current
       state: "off"
+    - condition: state
+      entity_id: input_boolean.match_enphase_solar
+      state: "off"
   actions:
     - action: script.set_tessie_amps_from_bms
       continue_on_error: true
 
 - id: tessie_auto_amps_from_bms
   alias: Tessie auto amps from EVTV BMS
-  description: Safety net while charging if auto_tessie_amps on and hold mode off.
+  description: Safety net while charging if auto_tessie_amps on and other modes off.
   mode: queued
   max: 3
   max_exceeded: silent
@@ -95,6 +136,9 @@
       state: "on"
     - condition: state
       entity_id: input_boolean.hold_evtv_current
+      state: "off"
+    - condition: state
+      entity_id: input_boolean.match_enphase_solar
       state: "off"
     - condition: or
       conditions:
