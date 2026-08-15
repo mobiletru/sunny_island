@@ -7,22 +7,16 @@
   description: >
     When Match Enphase solar is on, set Tessie charge amps from Enphase
     current_power_production (kW → A at EVSE voltage). Solar 0 → Tessie 0.
-  mode: queued
-  max: 5
+    Checks every 5 minutes (not on every solar tick).
+  mode: single
   max_exceeded: silent
   triggers:
-    - trigger: state
-      entity_id:
-        - sensor.envoy_122039004946_current_power_production
-        - sensor.envoy_122039004946_current_power_consumption
-        - input_boolean.match_enphase_solar
-        - input_boolean.enphase_surplus_only
-        - input_number.tessie_evse_voltage
-        - input_number.tessie_amps_cap
-        - switch.x_charge
-        - sensor.x_charging
+    # 5 minutes between amp checks
     - trigger: time_pattern
-      seconds: "/20"
+      minutes: "/5"
+    - trigger: state
+      entity_id: input_boolean.match_enphase_solar
+      to: "on"
     - trigger: homeassistant
       event: start
   conditions:
