@@ -88,6 +88,102 @@ set_tessie_amps_from_bms:
               no match when pack ≤ −10 A)
             entity_id: switch.x_charge
 
+# ---------------------------------------------------------------------------
+# Hold EVTV pack current at a setpoint (default −10 A) by trimming Tessie amps.
+# Sign: − discharge · + charge. More Tessie A → more pack discharge (more negative).
+# ---------------------------------------------------------------------------
+trim_tessie_for_pack_current:
+  alias: Trim Tessie amps for EVTV pack current target
+  icon: mdi:gauge
+  description: >
+    Adjust number.x_charge_current so pack current approaches
+    input_number.evtv_pack_current_target (default −10 A). Deadband ±1.5 A.
+  mode: single
+  sequence:
+    - if:
+        - condition: template
+          value_template: >-
+            {{ states('number.x_charge_current') in
+               ['unavailable','unknown','none','']
+               or states('sensor.battery_storage_tesla_pack_current') in
+               ['unavailable','unknown','none',''] }}
+      then:
+        - stop: Missing Tessie or pack current entity
+    - variables:
+        pack_a: >-
+          {{ states('sensor.battery_storage_tesla_pack_current') | float(0) }}
+        target: >-
+          {{ states('input_number.evtv_pack_current_target') | float(-10) }}
+        cur: >-
+          {{ states('number.x_charge_current') | float(0) | int }}
+        cap: >-
+          {{ states('input_number.tessie_amps_cap') | float(32) | int }}
+        # error > 0: pack higher than target (not discharging enough) → raise Tessie
+        # error < 0: pack lower than target (discharging too hard) → lower Tessie
+        error: "{{ pack_a | float - target | float }}"
+        step: >-
+          {% set e = error | float %}
+          {% if e > 6 %} 3
+          {% elif e > 3 %} 2
+          {% elif e > 1.5 %} 1
+          {% elif e < -6 %} -3
+          {% elif e < -3 %} -2
+          {% elif e < -1.5 %} -1
+          {% else %} 0
+          {% endif %}
+        new_amps: >-
+          {% set n = cur | int + step | int %}
+          {% set n = [n, 0] | max %}
+          {% set n = [n, cap | int] | min %}
+          {{ [n, 48] | min }}
+    - if:
+        - condition: template
+          value_template: "{{ step | int != 0 and new_amps | int != cur | int }}"
+      then:
+        - continue_on_error: true
+          action: number.set_value
+          target:
+            entity_id: number.x_charge_current
+          data:
+            value: "{{ new_amps | int }}"
+        - continue_on_error: true
+          action: logbook.log
+          data:
+            name: Hold EVTV current
+            message: >-
+              Pack {{ pack_a }} A (target {{ target }} A, err {{ error }}) →
+              Tessie {{ cur }} A → {{ new_amps }} A
+            entity_id: number.x_charge_current
+
+# One-shot: enable hold-at-target mode and start charge
+start_hold_evtv_current:
+  alias: Hold EVTV pack at target (Tessie trim)
+  icon: mdi:gauge
+  description: >
+    Enable hold_evtv_current, start car charge, then keep trimming Tessie amps
+    so pack current stays near input_number.evtv_pack_current_target (−10 A).
+  mode: restart
+  sequence:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.hold_evtv_current
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.match_evtv_charge_amps
+    - action: script.start_car_charger
+      continue_on_error: true
+    - delay:
+        seconds: 8
+    - action: script.trim_tessie_for_pack_current
+      continue_on_error: true
+    - action: script.notify_iphone
+      data:
+        title: "Hold EVTV current"
+        message: >-
+          Target {{ states('input_number.evtv_pack_current_target') }} A ·
+          pack now {{ states('sensor.battery_storage_tesla_pack_current') }} A ·
+          Tessie {{ states('number.x_charge_current') }} A.
+
 # One-shot button: enable match mode, sync amps, start charge if EVTV > 0
 start_evtv_matched_charge:
   alias: Start charge matching EVTV amps

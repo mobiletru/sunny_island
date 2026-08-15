@@ -13,6 +13,11 @@ input_boolean:
   match_evtv_charge_amps:
     name: Match EVTV charge amps → Tessie
     icon: mdi:sync
+    initial: false
+  # When on: trim Tessie amps so pack current stays near target (default −10 A)
+  hold_evtv_current:
+    name: Hold EVTV pack current (via Tessie amps)
+    icon: mdi:gauge
     initial: true
   tessie_stop_on_pack_volts:
     name: Stop Tessie on low pack V
@@ -33,6 +38,17 @@ input_number:
     initial: 32
     mode: box
     icon: mdi:speedometer
+
+  # Target pack current (− discharge · + charge). Default −10 A = 10 A discharge.
+  evtv_pack_current_target:
+    name: EVTV pack current target
+    min: -48
+    max: 48
+    step: 1
+    unit_of_measurement: A
+    initial: -10
+    mode: box
+    icon: mdi:current-dc
 
   # Pack bus voltage (12S ≈ 36–50 V). Default 38.4 V ≈ 3.2 V/cell × 12.
   tessie_stop_pack_volts:

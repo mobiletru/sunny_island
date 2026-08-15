@@ -1,13 +1,56 @@
 # ---------------------------------------------------------------------------
-# Match Tessie charge amps to EVTV BMS charge-rate (TCCH), including 0 A
-# Toggle: input_boolean.match_evtv_charge_amps (and/or auto_tessie_amps)
-# Cap:    input_number.tessie_amps_cap
+# Hold EVTV pack current at setpoint (default −10 A) by trimming Tessie amps
+# Toggle: input_boolean.hold_evtv_current
+# Target: input_number.evtv_pack_current_target (− discharge · + charge)
+# ---------------------------------------------------------------------------
+- id: tessie_hold_evtv_pack_current
+  alias: Hold EVTV pack current via Tessie amps
+  description: >
+    While hold mode is on and the car is charging, every 20s trim Tessie amps
+    so pack current stays near the target (default −10 A).
+  mode: single
+  max_exceeded: silent
+  triggers:
+    - trigger: state
+      entity_id:
+        - sensor.battery_storage_tesla_pack_current
+        - input_boolean.hold_evtv_current
+        - input_number.evtv_pack_current_target
+        - input_number.tessie_amps_cap
+        - switch.x_charge
+        - sensor.x_charging
+    - trigger: time_pattern
+      seconds: "/20"
+    - trigger: homeassistant
+      event: start
+  conditions:
+    - condition: state
+      entity_id: input_boolean.hold_evtv_current
+      state: "on"
+    - condition: or
+      conditions:
+        - condition: state
+          entity_id: switch.x_charge
+          state: "on"
+        - condition: template
+          value_template: >-
+            {{ states('sensor.x_charging') | lower in ['charging', 'starting'] }}
+        - condition: state
+          entity_id: input_boolean.car_charger
+          state: "on"
+  actions:
+    - action: script.trim_tessie_for_pack_current
+      continue_on_error: true
+
+# ---------------------------------------------------------------------------
+# Optional: match Tessie to TCCH charge command (not pack current)
+# Toggle: input_boolean.match_evtv_charge_amps
 # ---------------------------------------------------------------------------
 - id: tessie_match_evtv_charge_amps
-  alias: Tessie match EVTV charge amps
+  alias: Tessie match EVTV charge amps (TCCH)
   description: >
-    When Match EVTV charge amps is on, set number.x_charge_current to floor(TCCH)
-    every TCCH change and every minute. EVTV 0 A → Tessie 0 A (and stops charge).
+    When Match EVTV charge amps is on (and hold mode is off), set Tessie A =
+    floor(TCCH). Pack ≤ −10 A still forces 0 via the script.
   mode: queued
   max: 5
   max_exceeded: silent
@@ -15,34 +58,25 @@
     - trigger: state
       entity_id:
         - sensor.battery_storage_tesla_pack_tcch_amps
+        - sensor.battery_storage_tesla_pack_current
         - input_boolean.match_evtv_charge_amps
-        - input_boolean.auto_tessie_amps
         - input_number.tessie_amps_cap
-        - switch.x_charge
-        - sensor.x_charging
     - trigger: time_pattern
       seconds: "/30"
-    - trigger: homeassistant
-      event: start
   conditions:
-    - condition: or
-      conditions:
-        - condition: state
-          entity_id: input_boolean.match_evtv_charge_amps
-          state: "on"
-        - condition: state
-          entity_id: input_boolean.auto_tessie_amps
-          state: "on"
+    - condition: state
+      entity_id: input_boolean.match_evtv_charge_amps
+      state: "on"
+    - condition: state
+      entity_id: input_boolean.hold_evtv_current
+      state: "off"
   actions:
     - action: script.set_tessie_amps_from_bms
       continue_on_error: true
 
-# When match mode is on and EVTV rate rises above 0 while car is plugged, keep amps in sync
-# (start is left to the Start match-charge button / start_car_charger)
 - id: tessie_auto_amps_from_bms
   alias: Tessie auto amps from EVTV BMS
-  description: >
-    Legacy alias — same as match automation while charging (safety net).
+  description: Safety net while charging if auto_tessie_amps on and hold mode off.
   mode: queued
   max: 3
   max_exceeded: silent
@@ -53,13 +87,15 @@
         - switch.x_charge
         - sensor.x_charging
         - input_boolean.auto_tessie_amps
-        - input_number.tessie_amps_cap
     - trigger: time_pattern
       minutes: "/1"
   conditions:
     - condition: state
       entity_id: input_boolean.auto_tessie_amps
       state: "on"
+    - condition: state
+      entity_id: input_boolean.hold_evtv_current
+      state: "off"
     - condition: or
       conditions:
         - condition: state
