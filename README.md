@@ -14,7 +14,9 @@ Vanilla JS over HA WebSocket.
 ## What it does on start
 
 - Syncs `custom_components/tesla_evtv_bms` into `/config` (when `auto_sync: true`)
+- Creates the **Tesla EVTV BMS** config entry when `auto_setup_bms: true`
 - Installs packages / scripts / automations (Tessie charge, pack protection)
+- Adds `homeassistant.packages` include when missing
 - Copies optional History dashboard under `/config/dashboards/sunny_island`
 - Unifies sidebar: **Ingress only** (hides Lovelace `sunny-island` from the sidebar)
 - Serves the **Sunny Island** Ingress plant UI
@@ -37,8 +39,8 @@ This GitHub repo is an **app repository**. Add it once, then install **Sunny Isl
 2. **⋮ → Repositories** → add `https://github.com/mobiletru/sunny_island` → **Add**
 3. Find **Sunny Island** → **Install** → **Start**
 4. Sidebar → **Sunny Island** (one Ingress entry — the plant app)
-5. If the BMS integration is new: Devices & services → Add **Tesla EVTV BMS**
-6. Set **entity prefix** on the integration to match app option `pack_prefix` (default `battery_storage_tesla_pack`)
+5. The app adds **Tesla EVTV BMS** (UDP 6550, prefix `battery_storage_tesla_pack`) unless it already exists
+6. Optional: set **WebBox host** in app options, or Configure the BMS integration
 7. Paste a long-lived HA token in the UI (or set `ha_token` in options)
 
 Local / development: clone this repo to `/addons/sunny_island`, then **Settings → Apps → Local → Sunny Island**. See [INSTALL.md](INSTALL.md).
@@ -53,6 +55,10 @@ Local / development: clone this repo to `/addons/sunny_island`, then **Settings 
 | `pack_prefix` | `battery_storage_tesla_pack` | Must match integration **entity_prefix** |
 | `envoy_prefix` | `sensor.envoy_…` | Envoy entity prefix |
 | `ha_token` | _(empty)_ | Optional long-lived token for the plant UI |
+| `auto_setup_bms` | `true` | Create Tesla EVTV BMS config entry if missing |
+| `bms_udp_port` | `6550` | LiteCAN UDP listen port |
+| `webbox_host` | _(empty)_ | Optional SMA WebBox IP on the BMS entry |
+| `webbox_password` | _(empty)_ | Optional WebBox RPC password |
 
 ## Development
 
