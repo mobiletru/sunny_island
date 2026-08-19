@@ -56,9 +56,9 @@ This GitHub repo is an **app repository**. Add it once, then install **Sunny Isl
 6. Optional: set **WebBox host** in app options, or Configure the BMS integration
 7. Paste a long-lived HA token in the UI (or set `ha_token` in options)
 
-Local / development: clone this repo to `/addons/sunny_island`, then **Settings → Apps → Local → Sunny Island**. See [INSTALL.md](INSTALL.md).
+If you previously ran **Tesla EVTV BMS**, **Sunny Island Detail**, **WebBox**, or the v3 monitor/combo apps, stop and uninstall them after this app starts (sidebar duplicates go away automatically). See [INSTALL.md](INSTALL.md).
 
-If you previously installed **Sunny Island Detail**, **Tesla EVTV BMS**, **WebBox**, or the v3 monitor: stop and uninstall those apps. Keep this one.
+Local / development: clone this repo to `/addons/sunny_island`, then **Settings → Apps → Local → Sunny Island**.
 
 ## Options
 
@@ -67,6 +67,7 @@ If you previously installed **Sunny Island Detail**, **Tesla EVTV BMS**, **WebBo
 | `auto_sync` | `true` | Copy BMS integration into `/config` |
 | `install_dashboard` | `true` | Copy YAML dashboards under `/config/dashboards/sunny_island` |
 | `force_overwrite` | `false` | Overwrite existing integration/dashboard files on sync |
+| `retire_legacy_apps` | `true` | Stop leftover plant apps and hide their sidebar panels |
 | `pack_prefix` | `battery_storage_tesla_pack` | Must match integration **entity_prefix** |
 | `envoy_prefix` | `sensor.envoy_…` | Envoy entity prefix |
 | `ha_token` | _(empty)_ | Optional long-lived token for the plant UI |

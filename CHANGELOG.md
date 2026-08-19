@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.13
+
+- **One app:** on start, stop leftover plant apps and hide their sidebar panels
+  (Tesla EVTV BMS, Tesla EVTV BMS Monitor, Tesla EVTV BMS + Sunny Island,
+  Sunny Island Detail, Sunny Island WebBox) so only this Ingress UI remains
+- Option `retire_legacy_apps` (default on); does **not** uninstall — remove
+  those apps in Settings → Apps after this one is running
+- INSTALL lists every retired app / repository to drop
+
 ## 2.2.12
 
 - **Fix:** Ingress crash `mkdir: can't create directory '/var/lib/nginx/tmp': Permission denied`

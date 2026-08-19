@@ -12,6 +12,12 @@ configuration:
   force_overwrite:
     name: Force overwrite
     description: Overwrite existing integration, dashboard, and app-managed YAML on sync.
+  retire_legacy_apps:
+    name: Retire leftover plant apps
+    description: >-
+      Stop old Tesla EVTV BMS / Sunny Island Detail / WebBox apps and hide
+      their sidebar panels so only this Ingress plant UI remains. Does not
+      uninstall them — remove those apps in Settings → Apps after this one runs.
   pack_prefix:
     name: Pack entity prefix
     description: >-
