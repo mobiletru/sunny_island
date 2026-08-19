@@ -14,7 +14,11 @@ On start, with `auto_sync: true` and `map: homeassistant_config` at `/config`:
 - optional `/config/dashboards/sunny_island` + `lovelace_include.yaml`
 - examples under `/config/sunny_island_examples`
 
-**Never rewrites** `/config/configuration.yaml`.
+Adds `homeassistant.packages: !include_dir_named packages` when that include is
+missing. Does not rewrite the rest of `configuration.yaml`.
+
+With `auto_setup_bms: true`, creates the **Tesla EVTV BMS** config entry
+(LiteCAN UDP, default port 6550) after Core has loaded the custom component.
 
 Status is written to `/data/status.json`.
 
@@ -36,12 +40,14 @@ WebSocket to HA (`/api/websocket`) using either:
 WebBox is built into the **Tesla EVTV BMS** integration (Sunny Island app):
 
 1. Enable **Modbus** on the WebBox (Interfaces → Modbus)
-2. **Settings → Devices & services → Tesla EVTV BMS → Configure**
-   - **SMA WebBox IP** (e.g. `192.168.100.180`)
-   - **Password** (optional; JSON-RPC only)
+2. Set **SMA WebBox host** (and password) on the Sunny Island app options, **or**
+   **Settings → Devices & services → Tesla EVTV BMS → Configure**
+   - **SMA WebBox IP** (e.g. `192.168.1.180`)
+   - **Password** (optional; JSON-RPC only — default access is often `sma`)
    - **Enable WebBox Modbus TCP** (default on), port **502**
    - Unit IDs: gateway **1**, plant **2**, device/SI **3**
-3. Restart Core after first install
+   App options are applied to an existing BMS entry on start (not only on first create).
+3. Restart Core after first install of the custom component
 
 Creates `sensor.<pack_prefix>_webbox_*` — plant power/yields, grid V/Hz, SI battery V/temp/SoC, status, reactive/apparent, serials, **grid start** sensors (connection timer, operating status, generator status, grid control mode).
 
@@ -117,4 +123,3 @@ Start/stop charge buttons call:
   charge limit** if car SoC is already at/above `number.x_charge_limit`
   (otherwise Tesla stays `complete` and will not charge)
 - `script.shutdown_car_charger`
-

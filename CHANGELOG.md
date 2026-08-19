@@ -1,10 +1,18 @@
 # Changelog
 
+## 2.2.13
+
+- **Fix:** WebBox sensors stayed unavailable after auto-setup created the BMS
+  entry with an empty host. App options `webbox_host` / `webbox_password` are
+  now written onto an existing Tesla EVTV BMS entry on start (options flow),
+  not only when the entry is first created
+
 ## 2.2.12
 
 - **Fix:** Ingress crash `mkdir: can't create directory '/var/lib/nginx/tmp': Permission denied`
   — HAOS AppArmor cannot write `/var/lib/nginx` or `/var/log/nginx`. nginx now uses
   `/tmp/nginx` + `/dev/stderr` only
+- **Fix:** nginx worker `setgid(101) Operation not permitted` — run as `user root`
 - **Fix:** `SUPERVISOR_TOKEN` missing under s6-overlay — `run.sh` re-execs via
   `with-contenv` so Core API calls work
 - **Feature:** auto-add **Tesla EVTV BMS** config entry (`auto_setup_bms`, UDP port
