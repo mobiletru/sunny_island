@@ -521,7 +521,10 @@ def main() -> int:
     now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
     if not HA_CONFIG.is_dir():
-        errors.append(f"HA config not mounted at {HA_CONFIG} (need map: config:rw)")
+        errors.append(
+            f"HA config not mounted at {HA_CONFIG} "
+            "(need map: homeassistant_config → /config)"
+        )
         print(f"[sunny_island] ERROR: {errors[-1]}")
     elif auto_sync:
         try:

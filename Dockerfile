@@ -1,13 +1,15 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.21
+# Multi-arch official base. Supervisor 2026.04+ no longer supplies BUILD_FROM
+# unless build.yaml is present; the default must work on aarch64 and amd64.
+ARG BUILD_FROM=ghcr.io/home-assistant/base:3.21
 FROM ${BUILD_FROM}
 
 ARG BUILD_ARCH=amd64
-ARG BUILD_VERSION=2.2.10
+ARG BUILD_VERSION=2.2.11
 
 LABEL \
     io.hass.name="Sunny Island" \
     io.hass.description="Plant app: Tesla EVTV BMS + live dashboard (Enphase + Tessie)" \
-    io.hass.type="addon" \
+    io.hass.type="app" \
     io.hass.version="${BUILD_VERSION}" \
     io.hass.arch="${BUILD_ARCH}" \
     org.opencontainers.image.title="Sunny Island" \

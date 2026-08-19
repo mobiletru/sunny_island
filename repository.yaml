@@ -1,0 +1,4 @@
+# https://developers.home-assistant.io/docs/apps/repository#repository-configuration
+name: Sunny Island
+url: https://github.com/mobiletru/sunny_island
+maintainer: mobiletru

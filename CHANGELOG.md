@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.2.11
+
+- **HAOS App store:** add `repository.yaml` so this GitHub repo can be added under
+  Settings → Apps → Repositories (no `/addons` copy required)
+- **Packaging:** `icon.png`, `logo.png`, `translations/en.yaml`, custom `apparmor.txt`
+- **config.yaml:** map Home Assistant config as `homeassistant_config` → `/config`
+  (replaces deprecated `config:rw` / unused `addon_config`)
+- **Dockerfile:** official multi-arch `ghcr.io/home-assistant/base:3.21` default
+  (Supervisor 2026.04+ no longer injects `BUILD_FROM`); `io.hass.type=app`
+- **Ingress:** nginx allows Supervisor `172.30.32.2` and localhost health only
+- README / INSTALL document the App repository install path
+
 ## 2.2.10
 
 - **EVTV match charge:** button + automation set Tessie amps = floor(EVTV `tcch_amps`), including **0 A** (stops charge when EVTV rate is 0)

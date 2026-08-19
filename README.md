@@ -27,14 +27,21 @@ Vanilla JS over HA WebSocket.
 
 Sign convention: **− discharge · + charge** (matches `signs.py`)
 
-## Install
+## Install (Home Assistant OS App)
 
-1. Place this folder at `/addons/sunny_island` (or clone this repo)
-2. Settings → Apps → Local → **Sunny Island** → Install → Start
-3. Sidebar → **Sunny Island** (one entry — the plant app)
-4. If the BMS integration is new: Devices & services → Add **Tesla EVTV BMS**
-5. Set **entity prefix** on the integration to match add-on `pack_prefix` (default `battery_storage_tesla_pack`)
-6. Paste a long-lived HA token in the UI (or set `ha_token` in options)
+This GitHub repo is an **app repository**. Add it once, then install **Sunny Island** from **Settings → Apps**.
+
+[![Add this app repository](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fmobiletru%2Fsunny_island)
+
+1. **Settings → Apps → Install app** (the App store)
+2. **⋮ → Repositories** → add `https://github.com/mobiletru/sunny_island` → **Add**
+3. Find **Sunny Island** → **Install** → **Start**
+4. Sidebar → **Sunny Island** (one Ingress entry — the plant app)
+5. If the BMS integration is new: Devices & services → Add **Tesla EVTV BMS**
+6. Set **entity prefix** on the integration to match app option `pack_prefix` (default `battery_storage_tesla_pack`)
+7. Paste a long-lived HA token in the UI (or set `ha_token` in options)
+
+Local / development: clone this repo to `/addons/sunny_island`, then **Settings → Apps → Local → Sunny Island**. See [INSTALL.md](INSTALL.md).
 
 ## Options
 
