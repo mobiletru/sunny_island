@@ -46,6 +46,7 @@ RPC_OVERVIEW_MAP = {
 RPC_PROCESS_MAP = {
     "BatSoc": ("webbox_battery_soc", "float"),
     "BatVtg": ("webbox_battery_voltage", "float"),
+    "BatChrgVtg": ("webbox_bat_chrg_vtg", "float"),  # live BMS / charge target (V)
     "BatTmp": ("webbox_battery_temp", "float"),
     "InvPwrAt": ("webbox_device_power", "float_kw"),  # SI reports kW
     "Pac": ("webbox_device_power", "float_kw"),
@@ -109,6 +110,131 @@ BAT_TYP_LABELS: dict[str, str] = {
     "LiIon_Ext-BMS": "Lithium (ext. BMS)",
     "Other": "Other",
 }
+
+# VRLA / battery voltage channels (GetParameter / SetParameter).
+# Official SMA SI 5048 Technical Description SI5048-TB-TEN110340 and
+# SBU 5000 parameter errata ParaSBU50-E-TB-en-11:
+#   222.07–10 ChrgVtg* = cell voltage setpoints (V/cell)
+#   221.03 BatVtgNom = nominal battery voltage (V; 48 / 45.6)
+#   226.01 BatChrgVtgMan = manual charge voltage with BMS off (41–63 V)
+#   120.03 BatChrgVtg = live charging voltage target (V, display / process)
+# SI 5048U firmware 7.304/7.300 string table also lists BatVtgMax, BatVtgMin,
+# BatMinDchrgVtg, BatChrgVtgSimMan — exposed with the firmware names; no
+# published range found for those four. RPC-only; no Modbus registers.
+#
+# kind: "cell" = V/cell setpoint · "bank" = pack volts
+# writable False = live / BMS-provided (GetParameter or GetProcessData only)
+SI_VOLTAGE_CHANNELS: dict[str, dict[str, Any]] = {
+    "ChrgVtgBoost": {
+        "sensor_key": "webbox_chrg_vtg_boost",
+        "param_ids": ("chrg_vtg_boost", "chrgvtgboost"),
+        "writable": True,
+        "kind": "cell",
+        "min": 1.5,
+        "max": 2.7,
+        "title": "Boost charge (ChrgVtgBoost)",
+    },
+    "ChrgVtgFul": {
+        "sensor_key": "webbox_chrg_vtg_ful",
+        "param_ids": ("chrg_vtg_ful", "chrgvtgful"),
+        "writable": True,
+        "kind": "cell",
+        "min": 1.5,
+        "max": 2.7,
+        "title": "Full charge (ChrgVtgFul)",
+    },
+    "ChrgVtgEqu": {
+        "sensor_key": "webbox_chrg_vtg_equ",
+        "param_ids": ("chrg_vtg_equ", "chrgvtgequ"),
+        "writable": True,
+        "kind": "cell",
+        "min": 1.5,
+        "max": 2.7,
+        "title": "Equalize charge (ChrgVtgEqu)",
+    },
+    "ChrgVtgFlo": {
+        "sensor_key": "webbox_chrg_vtg_flo",
+        "param_ids": ("chrg_vtg_flo", "chrgvtgflo", "chrg_vtg_float"),
+        "writable": True,
+        "kind": "cell",
+        "min": 1.4,
+        "max": 2.4,
+        "title": "Float charge (ChrgVtgFlo)",
+    },
+    "BatVtgNom": {
+        "sensor_key": "webbox_bat_vtg_nom",
+        "param_ids": ("bat_vtg_nom", "batvtgnom"),
+        "writable": True,
+        "kind": "bank",
+        "min": 40.0,
+        "max": 60.0,
+        "title": "Nominal battery V (BatVtgNom)",
+    },
+    "BatVtgMax": {
+        "sensor_key": "webbox_bat_vtg_max",
+        "param_ids": ("bat_vtg_max", "batvtgmax"),
+        "writable": True,
+        "kind": "bank",
+        "min": 1.0,
+        "max": 100.0,
+        "title": "Battery V max (BatVtgMax)",
+    },
+    "BatVtgMin": {
+        "sensor_key": "webbox_bat_vtg_min",
+        "param_ids": ("bat_vtg_min", "batvtgmin"),
+        "writable": True,
+        "kind": "bank",
+        "min": 1.0,
+        "max": 100.0,
+        "title": "Battery V min (BatVtgMin)",
+    },
+    "BatMinDchrgVtg": {
+        "sensor_key": "webbox_bat_min_dchrg_vtg",
+        "param_ids": ("bat_min_dchrg_vtg", "batmindchrgvtg"),
+        "writable": True,
+        "kind": "bank",
+        "min": 1.0,
+        "max": 100.0,
+        "title": "Min discharge V (BatMinDchrgVtg)",
+    },
+    "BatChrgVtgSimMan": {
+        "sensor_key": "webbox_bat_chrg_vtg_sim_man",
+        "param_ids": ("bat_chrg_vtg_sim_man", "batchrgvtgsimman"),
+        "writable": True,
+        "kind": "bank",
+        "min": 41.0,
+        "max": 63.0,
+        "title": "Sim/manual charge V (BatChrgVtgSimMan)",
+    },
+    "BatChrgVtgMan": {
+        "sensor_key": "webbox_bat_chrg_vtg_man",
+        "param_ids": ("bat_chrg_vtg_man", "batchrgvtgman"),
+        "writable": True,
+        "kind": "bank",
+        "min": 41.0,
+        "max": 63.0,
+        "title": "Manual charge V (BatChrgVtgMan)",
+    },
+    "BatChrgVtg": {
+        "sensor_key": "webbox_bat_chrg_vtg",
+        "param_ids": ("bat_chrg_vtg", "batchrgvtg"),
+        "writable": False,
+        "kind": "bank",
+        "title": "Live charge V (BatChrgVtg)",
+    },
+}
+
+GET_PARAMETER_CORE_CHANNELS: tuple[str, ...] = (
+    GRID_MAN_STR_CHANNEL,
+    BAT_TYP_CHANNEL,
+)
+GET_PARAMETER_VOLTAGE_CHANNELS: tuple[str, ...] = tuple(SI_VOLTAGE_CHANNELS)
+GET_PARAMETER_CHANNELS: tuple[str, ...] = (
+    GET_PARAMETER_CORE_CHANNELS + GET_PARAMETER_VOLTAGE_CHANNELS
+)
+SI_VOLTAGE_SENSOR_KEYS: tuple[str, ...] = tuple(
+    spec["sensor_key"] for spec in SI_VOLTAGE_CHANNELS.values()
+)
 
 
 def webbox_password_hash(password: str) -> str:
@@ -342,6 +468,84 @@ def apply_bat_typ_optimistic(values: dict[str, Any], value: str) -> str:
     return typ
 
 
+def parse_voltage_value(raw: Any) -> float | None:
+    """Parse a WebBox voltage token (``2.40``, ``2.40 V``, ``54.0 V``)."""
+    if raw is None:
+        return None
+    text = str(raw).strip().replace(",", ".")
+    if not text or text in ("---", "-", "-----"):
+        return None
+    token = text.split()[0]
+    try:
+        return float(token)
+    except ValueError:
+        return None
+
+
+def format_voltage_rpc_value(num: float) -> str:
+    """Compact decimal string for SetParameter (2.40 → 2.4, 54.0 → 54)."""
+    text = f"{float(num):.3f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def resolve_si_voltage_param(param: str) -> dict[str, Any] | None:
+    """Resolve set_si_parameter id / firmware name → voltage channel spec."""
+    raw = str(param or "").strip()
+    if not raw:
+        return None
+    if raw in SI_VOLTAGE_CHANNELS:
+        return {"channel": raw, **SI_VOLTAGE_CHANNELS[raw]}
+    key = raw.lower().replace(" ", "_").replace("-", "_")
+    for channel, spec in SI_VOLTAGE_CHANNELS.items():
+        aliases = {
+            channel.lower().replace("-", "_"),
+            spec["sensor_key"].removeprefix("webbox_"),
+            *(a.lower().replace("-", "_") for a in spec.get("param_ids") or ()),
+        }
+        if key in aliases:
+            return {"channel": channel, **spec}
+    return None
+
+
+def value_to_voltage(param: str, value: Any) -> tuple[dict[str, Any], float]:
+    """Resolve + validate a voltage write. Returns (spec, number)."""
+    spec = resolve_si_voltage_param(param)
+    if spec is None:
+        raise ValueError(f"Unknown SI voltage parameter {param!r}")
+    if not spec.get("writable", True):
+        raise ValueError(
+            f"{spec['channel']} is read-only (live / BMS-provided charge voltage)"
+        )
+    num = parse_voltage_value(value)
+    if num is None:
+        raise ValueError(f"Invalid voltage {value!r} for {spec['channel']}")
+    lo = spec.get("min")
+    hi = spec.get("max")
+    if lo is not None and num < float(lo):
+        raise ValueError(f"{spec['channel']} must be ≥ {lo}")
+    if hi is not None and num > float(hi):
+        raise ValueError(f"{spec['channel']} must be ≤ {hi}")
+    return spec, num
+
+
+def apply_voltage(values: dict[str, Any], channel: str, raw: Any) -> None:
+    """Fill a webbox_* voltage sensor from a GetParameter / SetParameter value."""
+    spec = SI_VOLTAGE_CHANNELS.get(channel)
+    if not spec:
+        return
+    num = parse_voltage_value(raw)
+    if num is None:
+        return
+    values[spec["sensor_key"]] = num
+
+
+def apply_voltage_optimistic(values: dict[str, Any], param: str, value: Any) -> float:
+    """Update runtime values after a successful voltage write."""
+    spec, num = value_to_voltage(param, value)
+    values[spec["sensor_key"]] = num
+    return num
+
+
 def value_to_bat_typ(value: str) -> str:
     """Resolve set_si_parameter bat_typ value → official BatTyp string."""
     typ = normalize_bat_typ(value)
@@ -355,7 +559,7 @@ def value_to_bat_typ(value: str) -> str:
 
 
 def parse_rpc_parameters(body: str) -> dict[str, Any]:
-    """Map GetParameter / SetParameter channels (GdManStr, BatTyp) to sensors."""
+    """Map GetParameter / SetParameter channels to sensors."""
     envelope = _parse_rpc_envelope(body)
     if not envelope or "error" in envelope:
         return {}
@@ -378,6 +582,8 @@ def parse_rpc_parameters(body: str) -> dict[str, Any]:
                 apply_grid_man_str(out, str(value))
             elif meta == BAT_TYP_CHANNEL:
                 apply_bat_typ(out, str(value))
+            elif meta in SI_VOLTAGE_CHANNELS:
+                apply_voltage(out, meta, value)
     return out
 
 
@@ -513,49 +719,47 @@ async def async_poll_webbox(session, host: str, password: str | None) -> dict:
                 rpc_ok = True
                 values["webbox_rpc_status"] = "ok"
 
-            # 2b) SI parameters (GdManStr + BatTyp) — official WebBox RPC channels.
+            # 2b) SI parameters — official WebBox RPC channels.
             # GetParameter requires channels as plain string names (not {meta:…}
             # objects — those return "Error building response" on SI6048UM).
-            # If the combined request fails (older firmware without BatTyp),
-            # retry GdManStr alone so grid control keeps working.
-            gp_channels = [GRID_MAN_STR_CHANNEL, BAT_TYP_CHANNEL]
-            gp_body, _ = await _rpc_call(
-                session,
-                host,
-                "GetParameter",
-                password=password,
-                params={
-                    "devices": [
-                        {
-                            "key": device_key,
-                            "channels": gp_channels,
-                        }
-                    ]
-                },
-                timeout=15,
+            # Combined list first; if WebBox rejects an unknown voltage channel,
+            # fall back to GdManStr+BatTyp, then GdManStr alone, then voltages
+            # as their own request so grid/BatTyp keep working.
+            params = await _rpc_get_parameters(
+                session, host, password, device_key, GET_PARAMETER_CHANNELS
             )
-            params: dict[str, Any] = {}
-            envelope = _parse_rpc_envelope(gp_body or "")
-            if gp_body and envelope and "error" not in envelope:
-                params = parse_rpc_parameters(gp_body)
-            if not params:
-                gp_body, _ = await _rpc_call(
+            if not (
+                params.get("webbox_grid_man_str") or params.get("webbox_bat_typ")
+            ):
+                core = await _rpc_get_parameters(
                     session,
                     host,
-                    "GetParameter",
-                    password=password,
-                    params={
-                        "devices": [
-                            {
-                                "key": device_key,
-                                "channels": [GRID_MAN_STR_CHANNEL],
-                            }
-                        ]
-                    },
-                    timeout=15,
+                    password,
+                    device_key,
+                    GET_PARAMETER_CORE_CHANNELS,
                 )
-                if gp_body:
-                    params = parse_rpc_parameters(gp_body)
+                if core:
+                    params = {**params, **core}
+                if not (
+                    params.get("webbox_grid_man_str") or params.get("webbox_bat_typ")
+                ):
+                    gd = await _rpc_get_parameters(
+                        session,
+                        host,
+                        password,
+                        device_key,
+                        (GRID_MAN_STR_CHANNEL,),
+                    )
+                    params.update(gd)
+                if not any(k in params for k in SI_VOLTAGE_SENSOR_KEYS):
+                    extra = await _rpc_get_parameters(
+                        session,
+                        host,
+                        password,
+                        device_key,
+                        GET_PARAMETER_VOLTAGE_CHANNELS,
+                    )
+                    params.update(extra)
             if params:
                 values.update(params)
                 rpc_ok = True
@@ -680,6 +884,31 @@ async def async_write_grid_control_rpc(
         key,
     )
     return True
+
+
+async def _rpc_get_parameters(
+    session,
+    host: str,
+    password: str | None,
+    device_key: str,
+    channels: tuple[str, ...] | list[str],
+) -> dict[str, Any]:
+    """GetParameter for the given channel names. Empty dict on error/reject."""
+    names = [c for c in channels if c]
+    if not names:
+        return {}
+    body, _ = await _rpc_call(
+        session,
+        host,
+        "GetParameter",
+        password=password,
+        params={"devices": [{"key": device_key, "channels": names}]},
+        timeout=15,
+    )
+    envelope = _parse_rpc_envelope(body or "")
+    if not body or not envelope or "error" in envelope:
+        return {}
+    return parse_rpc_parameters(body)
 
 
 async def _resolve_si_device_key(
@@ -809,6 +1038,92 @@ async def async_write_bat_typ_rpc(
     return True
 
 
+async def async_write_voltage_rpc(
+    session,
+    host: str,
+    param: str,
+    value: Any,
+    *,
+    password: str | None = None,
+    device_key: str | None = None,
+) -> tuple[bool, float]:
+    """Write one SI voltage channel via WebBox SetParameter.
+
+    Same path as GdManStr / BatTyp. No Modbus register is used.
+    """
+    spec, num = value_to_voltage(param, value)
+    payload = format_voltage_rpc_value(num)
+    host = (host or "").strip()
+    if not host:
+        raise ValueError("WebBox host is empty")
+
+    key = await _resolve_si_device_key(
+        session, host, password=password, device_key=device_key
+    )
+    if not key:
+        return False, num
+
+    body, status = await _rpc_call(
+        session,
+        host,
+        "SetParameter",
+        password=password,
+        params={
+            "devices": [
+                {
+                    "key": key,
+                    "channels": [{"meta": spec["channel"], "value": payload}],
+                }
+            ]
+        },
+        timeout=20,
+    )
+    if not body:
+        _LOGGER.warning(
+            "WebBox %s RPC write failed value=%s host=%s status=%s",
+            spec["channel"],
+            payload,
+            host,
+            status,
+        )
+        return False, num
+
+    envelope = _parse_rpc_envelope(body)
+    if not envelope or "error" in envelope:
+        err = (envelope or {}).get("error") if isinstance(envelope, dict) else None
+        _LOGGER.warning(
+            "WebBox %s RPC error value=%s host=%s err=%s body=%s",
+            spec["channel"],
+            payload,
+            host,
+            err,
+            (body or "")[:200],
+        )
+        return False, num
+
+    parsed = parse_rpc_parameters(body)
+    echoed = parsed.get(spec["sensor_key"])
+    if echoed is not None and abs(float(echoed) - num) > 0.051:
+        _LOGGER.warning(
+            "WebBox %s RPC wrote %s but device returned %s on %s",
+            spec["channel"],
+            payload,
+            echoed,
+            host,
+        )
+        return False, num
+
+    _LOGGER.info(
+        "WebBox %s RPC → %s=%s on %s device=%s",
+        spec["channel"],
+        spec["channel"],
+        payload,
+        host,
+        key,
+    )
+    return True, num
+
+
 # Keys sourced from GetParameter / SetParameter — prefer over Modbus when present.
 RPC_PARAMETER_KEYS = frozenset(
     {
@@ -817,6 +1132,7 @@ RPC_PARAMETER_KEYS = frozenset(
         "webbox_grid_control",
         "webbox_grid_control_code",
         "webbox_bat_typ",
+        *SI_VOLTAGE_SENSOR_KEYS,
     }
 )
 

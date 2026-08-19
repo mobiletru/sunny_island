@@ -56,6 +56,17 @@ WEBBOX_SENSOR_KEYS = (
     "webbox_grid_control_code",
     "webbox_grid_control",
     "webbox_bat_typ",
+    "webbox_chrg_vtg_boost",
+    "webbox_chrg_vtg_ful",
+    "webbox_chrg_vtg_equ",
+    "webbox_chrg_vtg_flo",
+    "webbox_bat_vtg_nom",
+    "webbox_bat_vtg_max",
+    "webbox_bat_vtg_min",
+    "webbox_bat_min_dchrg_vtg",
+    "webbox_bat_chrg_vtg_sim_man",
+    "webbox_bat_chrg_vtg_man",
+    "webbox_bat_chrg_vtg",
     "webbox_battery_voltage",
     "webbox_battery_soc",
     "webbox_battery_temp",
@@ -82,7 +93,7 @@ WEBBOX_SENSOR_KEYS = (
 # Service: tesla_evtv_bms.set_grid_control
 SERVICE_SET_GRID_CONTROL = "set_grid_control"
 # Service: tesla_evtv_bms.set_si_parameter — write SI params from plant UI
-# (RPC SetParameter for grid_control / bat_typ; Modbus for the rest)
+# (RPC SetParameter for grid_control / bat_typ / charge voltages; Modbus for the rest)
 SERVICE_SET_SI_PARAMETER = "set_si_parameter"
 # set_si_parameter ids that use WebBox RPC SetParameter (not Modbus)
 SI_RPC_PARAM_BAT_TYP = frozenset({"bat_typ", "battyp", "battery_type"})

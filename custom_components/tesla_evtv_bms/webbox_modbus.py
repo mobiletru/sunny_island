@@ -583,6 +583,20 @@ async def async_write_si_parameter(
             "bat_typ is WebBox RPC SetParameter only (channel BatTyp); "
             "use tesla_evtv_bms.set_si_parameter — no Modbus register"
         )
+    if param_key.startswith("chrg_vtg_") or param_key.startswith("bat_vtg_") or param_key in (
+        "bat_min_dchrg_vtg",
+        "bat_chrg_vtg",
+        "bat_chrg_vtg_man",
+        "bat_chrg_vtg_sim_man",
+        "chrgvtgboost",
+        "chrgvtgful",
+        "chrgvtgequ",
+        "chrgvtgflo",
+    ):
+        raise ValueError(
+            f"{param_key} is WebBox RPC SetParameter only; "
+            "use tesla_evtv_bms.set_si_parameter — no Modbus register"
+        )
     if param_key == "grid_control":
         # Dedicated writer accepts friendly aliases (start/auto/off/…)
         mode = str(value).strip().lower().replace(" ", "_")

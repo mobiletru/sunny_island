@@ -189,3 +189,149 @@ def test_get_parameter_channel_list_includes_bat_typ():
     assert wb.BAT_TYP_CHANNEL == "BatTyp"
     assert "LiIon_Ext-BMS" in wb.BAT_TYP_VALUES
     assert "webbox_bat_typ" in wb.RPC_PARAMETER_KEYS
+
+
+def test_parse_voltage_value_tokens():
+    assert wb.parse_voltage_value("2.40") == 2.4
+    assert wb.parse_voltage_value("2.40 V") == 2.4
+    assert wb.parse_voltage_value("54.0 V") == 54.0
+    assert wb.parse_voltage_value("---") is None
+    assert wb.parse_voltage_value("") is None
+
+
+def test_format_voltage_rpc_value():
+    assert wb.format_voltage_rpc_value(2.40) == "2.4"
+    assert wb.format_voltage_rpc_value(2.25) == "2.25"
+    assert wb.format_voltage_rpc_value(54.0) == "54"
+
+
+def test_resolve_si_voltage_param_aliases():
+    boost = wb.resolve_si_voltage_param("chrg_vtg_boost")
+    assert boost["channel"] == "ChrgVtgBoost"
+    assert boost["sensor_key"] == "webbox_chrg_vtg_boost"
+    assert boost["kind"] == "cell"
+    assert boost["writable"] is True
+    assert wb.resolve_si_voltage_param("ChrgVtgFlo")["channel"] == "ChrgVtgFlo"
+    assert wb.resolve_si_voltage_param("BatChrgVtgMan")["channel"] == "BatChrgVtgMan"
+    assert wb.resolve_si_voltage_param("bat_chrg_vtg")["writable"] is False
+    assert wb.resolve_si_voltage_param("not_a_channel") is None
+
+
+def test_value_to_voltage_official_ranges():
+    spec, num = wb.value_to_voltage("ChrgVtgBoost", "2.40")
+    assert spec["channel"] == "ChrgVtgBoost"
+    assert num == 2.4
+    spec, num = wb.value_to_voltage("bat_chrg_vtg_man", 54)
+    assert spec["channel"] == "BatChrgVtgMan"
+    assert num == 54.0
+    try:
+        wb.value_to_voltage("ChrgVtgBoost", "3.5")
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "≤" in str(exc) or "2.7" in str(exc)
+    try:
+        wb.value_to_voltage("BatChrgVtg", "54")
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "read-only" in str(exc)
+
+
+def test_parse_rpc_parameters_charge_voltages():
+    body = (
+        '{"result":{"devices":[{"key":"SI5048","channels":['
+        '{"meta":"GdManStr","value":"Auto"},'
+        '{"meta":"BatTyp","value":"VRLA"},'
+        '{"meta":"ChrgVtgBoost","value":"2.40"},'
+        '{"meta":"ChrgVtgFul","value":"2.40 V"},'
+        '{"meta":"ChrgVtgEqu","value":"2.50"},'
+        '{"meta":"ChrgVtgFlo","value":"2.25"},'
+        '{"meta":"BatVtgNom","value":"48"},'
+        '{"meta":"BatChrgVtgMan","value":"54.0"},'
+        '{"meta":"BatChrgVtg","value":"53.2"}'
+        ']}]},"version":"1.0"}'
+    )
+    out = wb.parse_rpc_parameters(body)
+    assert out["webbox_grid_man_str"] == "Auto"
+    assert out["webbox_bat_typ"] == "VRLA"
+    assert out["webbox_chrg_vtg_boost"] == 2.4
+    assert out["webbox_chrg_vtg_ful"] == 2.4
+    assert out["webbox_chrg_vtg_equ"] == 2.5
+    assert out["webbox_chrg_vtg_flo"] == 2.25
+    assert out["webbox_bat_vtg_nom"] == 48.0
+    assert out["webbox_bat_chrg_vtg_man"] == 54.0
+    assert out["webbox_bat_chrg_vtg"] == 53.2
+
+
+def test_parse_rpc_parameters_firmware_voltage_names():
+    body = (
+        '{"result":{"devices":[{"key":"SI5048","channels":['
+        '{"meta":"BatVtgMax","value":"57.6"},'
+        '{"meta":"BatVtgMin","value":"42"},'
+        '{"meta":"BatMinDchrgVtg","value":"44"},'
+        '{"meta":"BatChrgVtgSimMan","value":"54.5"}'
+        ']}]},"version":"1.0"}'
+    )
+    out = wb.parse_rpc_parameters(body)
+    assert out["webbox_bat_vtg_max"] == 57.6
+    assert out["webbox_bat_vtg_min"] == 42.0
+    assert out["webbox_bat_min_dchrg_vtg"] == 44.0
+    assert out["webbox_bat_chrg_vtg_sim_man"] == 54.5
+
+
+def test_apply_voltage_optimistic_write():
+    values = {}
+    num = wb.apply_voltage_optimistic(values, "chrg_vtg_flo", "2.25")
+    assert num == 2.25
+    assert values["webbox_chrg_vtg_flo"] == 2.25
+
+
+def test_set_parameter_payload_shape_chrg_vtg_boost():
+    req = wb.build_rpc_request(
+        "SetParameter",
+        password="sma",
+        params={
+            "devices": [
+                {
+                    "key": "SI5048",
+                    "channels": [{"meta": "ChrgVtgBoost", "value": "2.4"}],
+                }
+            ]
+        },
+    )
+    assert req["proc"] == "SetParameter"
+    assert req["params"]["devices"][0]["channels"][0] == {
+        "meta": "ChrgVtgBoost",
+        "value": "2.4",
+    }
+
+
+def test_get_parameter_channel_lists_keep_core_first():
+    assert wb.GET_PARAMETER_CORE_CHANNELS == ("GdManStr", "BatTyp")
+    assert "ChrgVtgBoost" in wb.GET_PARAMETER_VOLTAGE_CHANNELS
+    assert "ChrgVtgFlo" in wb.GET_PARAMETER_VOLTAGE_CHANNELS
+    assert "BatChrgVtgMan" in wb.GET_PARAMETER_VOLTAGE_CHANNELS
+    assert "BatChrgVtg" in wb.GET_PARAMETER_VOLTAGE_CHANNELS
+    assert wb.GET_PARAMETER_CHANNELS[0] == "GdManStr"
+    assert wb.GET_PARAMETER_CHANNELS[1] == "BatTyp"
+    assert "webbox_chrg_vtg_boost" in wb.RPC_PARAMETER_KEYS
+    assert "webbox_bat_chrg_vtg" in wb.RPC_PARAMETER_KEYS
+
+
+def test_parse_rpc_process_data_batchrgvtg():
+    body = (
+        '{"result":{"devices":[{"key":"SI5048","channels":'
+        '[{"meta":"BatChrgVtg","value":"53.1"},{"meta":"BatSoc","value":"80"}]}]},'
+        '"version":"1.0"}'
+    )
+    out = wb.parse_rpc_process_data(body)
+    assert out["webbox_bat_chrg_vtg"] == 53.1
+    assert out["webbox_battery_soc"] == 80.0
+
+
+def test_merge_modbus_keeps_rpc_charge_voltages():
+    http = {"webbox_chrg_vtg_boost": 2.4, "webbox_bat_chrg_vtg": 53.0}
+    mb = {"webbox_battery_soc": 40}
+    out = wb.merge_modbus_without_clobbering_rpc_params(http, mb)
+    assert out["webbox_chrg_vtg_boost"] == 2.4
+    assert out["webbox_bat_chrg_vtg"] == 53.0
+    assert out["webbox_battery_soc"] == 40

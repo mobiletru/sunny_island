@@ -112,6 +112,18 @@ def test_bat_typ_is_not_a_modbus_write_param():
         assert "Unknown SI parameter" in str(exc)
 
 
+def test_charge_voltage_channels_are_not_modbus_write_params():
+    """ChrgVtg* / BatChrgVtg* are RPC-only — do not invent registers."""
+    for key in (
+        "chrg_vtg_boost",
+        "chrg_vtg_flo",
+        "bat_chrg_vtg_man",
+        "bat_vtg_nom",
+        "bat_min_dchrg_vtg",
+    ):
+        assert key not in mb.SI_WRITE_PARAMS
+
+
 def test_write_holding_u32_pdu_shape():
     """FC16 encoding: two registers big-endian for value 308."""
     import struct

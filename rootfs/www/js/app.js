@@ -464,7 +464,9 @@
         next = btn.dataset.paramStep === '+' ? next + step : next - step;
         if (ctrl.min != null) next = Math.max(ctrl.min, next);
         if (ctrl.max != null) next = Math.min(ctrl.max, next);
-        value = String(Math.round(next));
+        const stepStr = String(ctrl.step ?? '');
+        const decimals = (stepStr.split('.')[1] || '').length;
+        value = decimals ? String(Number(next.toFixed(decimals))) : String(Math.round(next));
       }
       if (value == null || value === '') return;
       if (!ctrl.write?.parameter) return;
@@ -535,9 +537,13 @@
           .querySelectorAll(`[data-param-id="${ctrl.id}"][data-param-value]`)
           .forEach((btn) => {
             const v = parseFloat(btn.dataset.paramValue);
+            const tol =
+              ctrl.step != null && Number(ctrl.step) < 1
+                ? Number(ctrl.step) / 2 + 1e-9
+                : 0.51;
             btn.classList.toggle(
               'is-active',
-              Number.isFinite(cur) && Number.isFinite(v) && Math.abs(cur - v) < 0.51
+              Number.isFinite(cur) && Number.isFinite(v) && Math.abs(cur - v) < tol
             );
           });
       }
@@ -693,6 +699,8 @@
         return num.toFixed(3) + ' V';
       case 'volts':
         return num.toFixed(2) + ' V';
+      case 'volts_cell':
+        return num.toFixed(2) + ' V/cell';
       case 'amps':
         return (num >= 0 ? '+' : '') + num.toFixed(1) + ' A';
       case 'int':

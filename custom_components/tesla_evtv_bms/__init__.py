@@ -45,10 +45,13 @@ from .runtime import PackRuntime
 from .webbox import (
     apply_bat_typ_optimistic,
     apply_grid_control_optimistic,
+    apply_voltage_optimistic,
     async_poll_webbox,
     async_set_grid_control,
     async_write_bat_typ_rpc,
+    async_write_voltage_rpc,
     merge_modbus_without_clobbering_rpc_params,
+    resolve_si_voltage_param,
 )
 from .webbox_modbus import (
     apply_si_parameter_optimistic,
@@ -144,6 +147,37 @@ async def _write_bat_typ_for_runtime(
     )
 
 
+async def _write_voltage_for_runtime(
+    hass: HomeAssistant, rt: PackRuntime, param: str, value
+) -> None:
+    """RPC SetParameter for ChrgVtg* / BatVtg* / BatChrgVtgMan. No Modbus."""
+    cfg = rt.webbox
+    host = (cfg.get("host") or "").strip()
+    if not host:
+        raise HomeAssistantError("WebBox host not configured")
+    session = async_get_clientsession(hass)
+    device_key = (cfg.get("device_key") or rt.values.get("webbox_device_key") or "") or None
+    try:
+        ok, num = await async_write_voltage_rpc(
+            session,
+            host,
+            param,
+            value,
+            password=cfg.get("password") or None,
+            device_key=device_key,
+        )
+    except ValueError as err:
+        raise HomeAssistantError(str(err)) from err
+    if not ok:
+        raise HomeAssistantError(
+            f"Voltage write failed on {host} (RPC SetParameter {param})"
+        )
+    apply_voltage_optimistic(rt.values, param, num)
+    async_dispatcher_send(
+        hass, SIGNAL_UPDATE_ENTITY.format(rt.name), rt.values
+    )
+
+
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     async def _handle_set_grid_control(call: ServiceCall) -> None:
         mode = call.data[ATTR_MODE]
@@ -232,6 +266,12 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
                 continue
             if param_key in SI_RPC_PARAM_BAT_TYP:
                 await _write_bat_typ_for_runtime(hass, rt, str(value))
+                continue
+            volt = resolve_si_voltage_param(param_key) or resolve_si_voltage_param(
+                str(param)
+            )
+            if volt:
+                await _write_voltage_for_runtime(hass, rt, volt["channel"], value)
                 continue
             cfg = rt.webbox
             host = (cfg.get("host") or "").strip()
@@ -355,7 +395,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             values: dict = {}
             errors: list[str] = []
 
-            # HTTP/RPC overview + GetParameter (GdManStr + BatTyp)
+            # HTTP/RPC overview + GetParameter (GdManStr + BatTyp + voltages)
             try:
                 http_vals = await async_poll_webbox(
                     session, webbox_host, webbox_password

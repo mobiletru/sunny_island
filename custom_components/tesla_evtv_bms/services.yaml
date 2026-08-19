@@ -36,20 +36,30 @@ set_si_parameter:
   name: Set Sunny Island parameter
   description: >
     Write a Sunny Island parameter. Used by the plant app parameter buttons.
-    bat_typ and grid_control use WebBox JSON-RPC SetParameter (channels BatTyp
-    and GdManStr). Other ids write Modbus unit 3. Parameters: bat_typ,
-    grid_control, reverse_feed, power_setpoint_mode, discharge_limit,
-    feed_soc_upper, feed_soc_lower, power_setpoint_timeout.
+    RPC SetParameter: bat_typ (BatTyp), grid_control (GdManStr), and VRLA
+    charge voltages (ChrgVtgBoost / Ful / Equ / Flo, BatVtgNom / Max / Min,
+    BatMinDchrgVtg, BatChrgVtgSimMan / BatChrgVtgMan). BatChrgVtg is
+    read-only. Other ids write Modbus unit 3.
   fields:
     parameter:
       name: Parameter
-      description: SI parameter id (bat_typ / BatTyp = menu 221.01 battery type)
+      description: SI parameter id (firmware name or snake_case id)
       required: true
-      example: bat_typ
+      example: chrg_vtg_boost
       selector:
         select:
           options:
             - bat_typ
+            - chrg_vtg_boost
+            - chrg_vtg_ful
+            - chrg_vtg_equ
+            - chrg_vtg_flo
+            - bat_vtg_nom
+            - bat_vtg_max
+            - bat_vtg_min
+            - bat_min_dchrg_vtg
+            - bat_chrg_vtg_sim_man
+            - bat_chrg_vtg_man
             - grid_control
             - reverse_feed
             - power_setpoint_mode
@@ -60,11 +70,11 @@ set_si_parameter:
     value:
       name: Value
       description: >
-        BatTyp: LiIon_Ext-BMS (Tesla EVTV) | VRLA | FLA | NiCd | Other.
-        Other enums: yes/no, off/manual_w/manual_pct/external, manual_on/automatic.
-        Or integer (limits 0–100, timeout seconds).
+        BatTyp: LiIon_Ext-BMS | VRLA | FLA | NiCd | Other.
+        Charge voltages: V/cell for ChrgVtg* (official 1.4–2.7), pack V for
+        BatChrgVtgMan (41–63). Other enums or integers as before.
       required: true
-      example: "LiIon_Ext-BMS"
+      example: "2.40"
       selector:
         text:
     entity_prefix:

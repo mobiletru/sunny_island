@@ -55,6 +55,10 @@ def test_default_cells_is_12s():
     assert const.DEFAULT_CELLS_IN_SERIES == 12
     assert const.DEFAULT_PORT == 6550
     assert "webbox_bat_typ" in const.WEBBOX_SENSOR_KEYS
+    assert "webbox_chrg_vtg_boost" in const.WEBBOX_SENSOR_KEYS
+    assert "webbox_chrg_vtg_flo" in const.WEBBOX_SENSOR_KEYS
+    assert "webbox_bat_chrg_vtg_man" in const.WEBBOX_SENSOR_KEYS
+    assert "webbox_bat_chrg_vtg" in const.WEBBOX_SENSOR_KEYS
     assert "bat_typ" in const.SI_RPC_PARAM_BAT_TYP
     assert "battyp" in const.SI_RPC_PARAM_BAT_TYP
 

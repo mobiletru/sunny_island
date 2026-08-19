@@ -76,6 +76,8 @@ If you previously installed **Sunny Island Detail**, **Tesla EVTV BMS**, **WebBo
 | `webbox_password` | _(empty)_ | WebBox RPC password — applied with `webbox_host` |
 | `apply_bat_typ_liion_ext_bms` | `false` | One-shot: set SI `BatTyp` to `LiIon_Ext-BMS` when WebBox is configured (skipped if already set) |
 
+Plant UI / `tesla_evtv_bms.set_si_parameter` can also read and write official VRLA charge-voltage channels (`ChrgVtgBoost` / `Ful` / `Equ` / `Flo` as **V/cell**, `BatChrgVtgMan` as pack V). Live `BatChrgVtg` is read-only. Nothing is auto-written on start.
+
 ## Development
 
 ```bash

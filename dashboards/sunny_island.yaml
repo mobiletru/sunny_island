@@ -933,6 +933,28 @@ views:
         entities:
           - entity: sensor.battery_storage_tesla_pack_webbox_bat_typ
             name: BatTyp (221.01)
+          - entity: sensor.battery_storage_tesla_pack_webbox_chrg_vtg_boost
+            name: ChrgVtgBoost (V/cell)
+          - entity: sensor.battery_storage_tesla_pack_webbox_chrg_vtg_ful
+            name: ChrgVtgFul (V/cell)
+          - entity: sensor.battery_storage_tesla_pack_webbox_chrg_vtg_equ
+            name: ChrgVtgEqu (V/cell)
+          - entity: sensor.battery_storage_tesla_pack_webbox_chrg_vtg_flo
+            name: ChrgVtgFlo (V/cell)
+          - entity: sensor.battery_storage_tesla_pack_webbox_bat_vtg_nom
+            name: BatVtgNom
+          - entity: sensor.battery_storage_tesla_pack_webbox_bat_vtg_max
+            name: BatVtgMax
+          - entity: sensor.battery_storage_tesla_pack_webbox_bat_vtg_min
+            name: BatVtgMin
+          - entity: sensor.battery_storage_tesla_pack_webbox_bat_min_dchrg_vtg
+            name: BatMinDchrgVtg
+          - entity: sensor.battery_storage_tesla_pack_webbox_bat_chrg_vtg_man
+            name: BatChrgVtgMan
+          - entity: sensor.battery_storage_tesla_pack_webbox_bat_chrg_vtg_sim_man
+            name: BatChrgVtgSimMan
+          - entity: sensor.battery_storage_tesla_pack_webbox_bat_chrg_vtg
+            name: BatChrgVtg (live)
           - entity: sensor.battery_storage_tesla_pack_webbox_discharge_limit
             name: Discharge limit
           - entity: sensor.battery_storage_tesla_pack_webbox_reverse_feed

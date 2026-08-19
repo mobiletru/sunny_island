@@ -105,6 +105,29 @@ data:
   value: LiIon_Ext-BMS
 ```
 
+### VRLA charge voltages (ChrgVtg* / BatChrgVtgMan)
+
+Official SMA **SI 5048 Technical Description** ([SI5048-TB-TEN110340](https://files.sma.de/downloads/SI5048-TB-TEN110340.pdf))
+and **SBU 5000 parameter errata** ([ParaSBU50-E-TB-en-11](https://files.sma.de/downloads/ParaSBU50-E-TB-en-11.pdf)):
+
+| Channel | Menu | Unit | Role |
+|---------|------|------|------|
+| `ChrgVtgBoost` / `Ful` / `Equ` / `Flo` | 222.07–10 | **V/cell** | Boost / full / equalize / float setpoints |
+| `BatVtgNom` | 221.03 | V | Nominal battery voltage (48 / 45.6) |
+| `BatChrgVtgMan` | 226.01 | V (41–63) | Manual charge voltage when BMS is off / timeout |
+| `BatChrgVtg` | 120.03 | V | Live charging voltage target (read-only) |
+
+Firmware **7.304/7.300** also lists `BatVtgMax`, `BatVtgMin`, `BatMinDchrgVtg`,
+`BatChrgVtgSimMan` — exposed with those names. If WebBox rejects a channel,
+the poller keeps `GdManStr` / `BatTyp` working.
+
+```yaml
+service: tesla_evtv_bms.set_si_parameter
+data:
+  parameter: chrg_vtg_boost
+  value: "2.40"
+```
+
 > If the write fails: enable **RPC** on the WebBox, confirm the password, and
 > check unit ID **3** is the SI when using the Modbus fallback.
 

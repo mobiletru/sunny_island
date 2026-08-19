@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.2.15
+
+- **Feature:** read / write official VRLA charge-voltage channels via WebBox
+  JSON-RPC `GetParameter` / `SetParameter` (same path as `GdManStr` / `BatTyp`).
+  No invented Modbus registers. No auto-write on start
+- Channels: `ChrgVtgBoost` / `Ful` / `Equ` / `Flo` (V/cell, SMA SI5048-TB
+  222.07–10), `BatVtgNom`, `BatVtgMax`, `BatVtgMin`, `BatMinDchrgVtg`,
+  `BatChrgVtgSimMan`, `BatChrgVtgMan` (41–63 V, 226.01), live `BatChrgVtg`
+  (read-only, 120.03)
+- Combined GetParameter falls back to `GdManStr`+`BatTyp`, then `GdManStr`,
+  then voltages alone if WebBox rejects a channel
+- Service `tesla_evtv_bms.set_si_parameter` ids `chrg_vtg_boost` etc.
+- Sensors `sensor.<prefix>_webbox_chrg_vtg_*` + plant UI number buttons
+- Integration **1.9.10**
+
 ## 2.2.14
 
 - **Feature:** write / read Sunny Island **BatTyp** (menu 221.01 / QCG 003.07) via

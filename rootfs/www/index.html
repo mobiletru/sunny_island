@@ -200,6 +200,9 @@
             <div class="tile" data-metric="webboxBattTemp"><span class="tile-l">SI temp</span><span class="metric-value">—</span></div>
             <div class="tile" data-metric="webboxBattA"><span class="tile-l">SI batt A</span><span class="metric-value">—</span></div>
             <div class="tile" data-metric="webboxBatTyp"><span class="tile-l">BatTyp</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxChrgVtgBoost"><span class="tile-l">Boost V/cell</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxChrgVtgFlo"><span class="tile-l">Float V/cell</span><span class="metric-value">—</span></div>
+            <div class="tile" data-metric="webboxBatChrgVtg"><span class="tile-l">Charge V</span><span class="metric-value">—</span></div>
             <div class="tile" data-metric="webboxRelay"><span class="tile-l">Grid relay</span><span class="metric-value">—</span></div>
             <div class="tile" data-metric="webboxReactive"><span class="tile-l">Reactive</span><span class="metric-value">—</span></div>
             <div class="tile" data-metric="webboxApparent"><span class="tile-l">Apparent</span><span class="metric-value">—</span></div>
@@ -210,7 +213,8 @@
           <p class="protect-note">
             Writable buttons call <b>tesla_evtv_bms.set_si_parameter</b> ·
             Grid control uses RPC <b>GdManStr</b> · battery type uses RPC <b>BatTyp</b>
-            (LiIon_Ext-BMS for Tesla EVTV) · other params Modbus unit 3 ·
+            · charge voltages use RPC <b>ChrgVtg*</b> / <b>BatChrgVtgMan</b>
+            (V/cell for boost/full/equalize/float) · other params Modbus unit 3 ·
             green/blue/red = write · grey = live readout
           </p>
 
