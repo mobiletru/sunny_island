@@ -1,15 +1,28 @@
 # Sunny Island
 
-**One HAOS app** for the whole plant (not two sidebar entries):
+**One HAOS app** for the whole plant (one sidebar entry):
 
-1. **Tesla EVTV BMS** integration installer (LiteCAN UDP → pack sensors + WebBox)
-2. **Ingress plant UI** — the only **Sunny Island** sidebar panel (gauges, grid start, Tessie charge)
+1. **Tesla EVTV BMS** — LiteCAN UDP pack sensors + SMA WebBox
+2. **Ingress plant UI** — gauges, grid start, Tessie charge, wrench/quirks
 
 Optional **History** Lovelace YAML stays at `/sunny-island/*` but is **hidden from the sidebar**.
 
 Vanilla JS over HA WebSocket.
 
-> Old repos (`tesla_evtv_bms`, `sunny_island_detail`, `sma-webbox-dashboard`, etc.) are retired and point here.
+## This is the only plant app
+
+These older apps are **retired** and redirect here. Do not install them:
+
+| Retired repo | Used to be |
+|--------------|------------|
+| `tesla_evtv_bms` | HACS EVTV BMS integration |
+| `tesla_evtv_bms_v3` | 3 add-ons: BMS installer, monitor, plant UI |
+| `sunny_island_detail` | Separate Ingress dashboard |
+| `HA_SMA_WEBBOX` | WebBox / Sunny Island parameter add-on |
+| `sma-webbox-dashboard` | HACS WebBox dashboard |
+| `sunny-island-can` | SocketCAN add-on |
+
+Install **only** this repository.
 
 ## What it does on start
 
@@ -44,6 +57,8 @@ This GitHub repo is an **app repository**. Add it once, then install **Sunny Isl
 7. Paste a long-lived HA token in the UI (or set `ha_token` in options)
 
 Local / development: clone this repo to `/addons/sunny_island`, then **Settings → Apps → Local → Sunny Island**. See [INSTALL.md](INSTALL.md).
+
+If you previously installed **Sunny Island Detail**, **Tesla EVTV BMS**, **WebBox**, or the v3 monitor: stop and uninstall those apps. Keep this one.
 
 ## Options
 
