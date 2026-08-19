@@ -32,5 +32,17 @@ configuration:
   log_level:
     name: Log level
     description: App log verbosity.
+  auto_setup_bms:
+    name: Auto-add Tesla EVTV BMS
+    description: Create the Tesla EVTV BMS integration on first start if it is not already configured.
+  bms_udp_port:
+    name: BMS UDP port
+    description: LiteCAN UDP port used when auto-adding the Tesla EVTV BMS integration.
+  webbox_host:
+    name: WebBox host
+    description: Optional SMA WebBox IP or hostname stored on the integration during auto-setup.
+  webbox_password:
+    name: WebBox password
+    description: Optional WebBox access password stored on the integration during auto-setup.
 network:
   8098/tcp: Plant UI (optional host mapping; prefer the Ingress sidebar)
