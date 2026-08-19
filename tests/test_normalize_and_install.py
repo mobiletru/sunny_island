@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 import tempfile
 import types
@@ -154,3 +155,56 @@ def test_render_config_rewrites_prefixes():
     assert 'const PACK_PREFIX = "new_pack";' in out
     assert 'const ENVOY_PREFIX = "sensor.envoy_x";' in out
     assert "DISCHARGE_IS_NEGATIVE" in out
+
+
+def test_bms_flow_payload_defaults():
+    install = _load_script("install_integration.py")
+    payload = install._bms_flow_payload({})
+    assert payload["port"] == 6550
+    assert payload["entity_prefix"] == "battery_storage_tesla_pack"
+    assert payload["name"] == "Tesla Pack"
+    assert payload["cells_in_series"] == 12
+    assert payload["webbox_modbus"] is True
+    assert payload["webbox_host"] == ""
+
+
+def test_bms_flow_payload_from_options():
+    install = _load_script("install_integration.py")
+    payload = install._bms_flow_payload(
+        {
+            "pack_prefix": "battery_storage_tesla_pack",
+            "bms_udp_port": "6551",
+            "webbox_host": " 192.168.100.180 ",
+        }
+    )
+    assert payload["port"] == 6551
+    assert payload["webbox_host"] == "192.168.100.180"
+
+
+def test_ensure_packages_include_appends_when_missing():
+    install = _load_script("install_integration.py")
+    with tempfile.TemporaryDirectory() as td:
+        ha = Path(td)
+        install.HA_CONFIG = ha
+        cfg = ha / "configuration.yaml"
+        cfg.write_text("default_config:\n", encoding="utf-8")
+        msg = install._ensure_packages_include()
+        text = cfg.read_text(encoding="utf-8")
+        assert "include_dir_named packages" in text
+        assert "added" in msg
+        again = install._ensure_packages_include()
+        assert again == "packages include already present"
+
+
+def test_ha_token_falls_back_to_options():
+    install = _load_script("install_integration.py")
+    saved = {
+        k: os.environ.pop(k)
+        for k in ("SUPERVISOR_TOKEN", "HASSIO_TOKEN")
+        if k in os.environ
+    }
+    try:
+        assert install._ha_token() == ""
+        assert install._ha_token({"ha_token": "abc"}) == "abc"
+    finally:
+        os.environ.update(saved)
