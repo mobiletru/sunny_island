@@ -102,6 +102,16 @@ def test_decode_u64_nan_all_ones():
     assert mb._decode_regs([0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF], "u64", 0.001) is None
 
 
+def test_bat_typ_is_not_a_modbus_write_param():
+    """BatTyp is RPC-only — do not invent a holding register."""
+    assert "bat_typ" not in mb.SI_WRITE_PARAMS
+    try:
+        mb._resolve_si_write_value("bat_typ", "LiIon_Ext-BMS")
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "Unknown SI parameter" in str(exc)
+
+
 def test_write_holding_u32_pdu_shape():
     """FC16 encoding: two registers big-endian for value 308."""
     import struct

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.2.14
+
+- **Feature:** write / read Sunny Island **BatTyp** (menu 221.01 / QCG 003.07) via
+  WebBox JSON-RPC `SetParameter` / `GetParameter` — same path as `GdManStr`.
+  Official value **`LiIon_Ext-BMS`** for Tesla EVTV lithium pack with external BMS
+  (`VRLA`, `FLA`, `NiCd`, `Other` also accepted). No invented Modbus register
+- **Service:** `tesla_evtv_bms.set_si_parameter` parameter id `bat_typ` / `BatTyp`
+- **Sensor:** `sensor.<prefix>_webbox_bat_typ` (live GetParameter readout)
+- **Plant UI:** battery-type buttons (default highlight LiIon_Ext-BMS)
+- **Add-on option:** `apply_bat_typ_liion_ext_bms` (default **off**, one-shot —
+  skipped if already `LiIon_Ext-BMS` or previously applied)
+- Integration **1.9.9**
+
 ## 2.2.13
 
 - **Fix:** WebBox sensors stayed unavailable after auto-setup created the BMS

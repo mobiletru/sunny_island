@@ -578,6 +578,11 @@ async def async_write_si_parameter(
         "setpoint_timeout": "power_setpoint_timeout",
     }
     param_key = aliases.get(param_key, param_key)
+    if param_key in ("bat_typ", "battyp", "battery_type"):
+        raise ValueError(
+            "bat_typ is WebBox RPC SetParameter only (channel BatTyp); "
+            "use tesla_evtv_bms.set_si_parameter — no Modbus register"
+        )
     if param_key == "grid_control":
         # Dedicated writer accepts friendly aliases (start/auto/off/…)
         mode = str(value).strip().lower().replace(" ", "_")
