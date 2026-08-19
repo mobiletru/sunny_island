@@ -85,6 +85,9 @@ data:
 | 3 | First SI / inverter on RS485 |
 
 **Sidebar:** one panel — Ingress **Sunny Island** (plant controls + live gauges).
+On start, leftover plant apps (EVTV BMS installer/monitor, Sunny Island Detail,
+WebBox) are stopped and their Ingress entries are hidden when
+`retire_legacy_apps` is enabled. Uninstall those apps in Settings → Apps.
 
 **History:** optional multi-view Lovelace (Overview · Cells · Energy · WebBox · Solar & car)
 at `/sunny-island/overview` — linked from the plant UI footer; hidden from sidebar so

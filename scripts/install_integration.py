@@ -79,12 +79,89 @@ LOVELACE_DASHBOARDS = {
     },
 }
 
+# Sibling HAOS apps this repo replaces. Bare slugs from those repos' config.yaml.
+RETIRED_APP_SLUGS = frozenset(
+    {
+        "tesla_evtv_bms",
+        "tesla_evtv_bms_monitor",
+        "tesla_evtv_sunny_island",
+        "sunny_island_detail",
+    }
+)
+RETIRED_APP_NAMES = frozenset(
+    {
+        "Tesla EVTV BMS",
+        "Tesla EVTV BMS Monitor",
+        "Tesla EVTV BMS + Sunny Island",
+        "Sunny Island Detail",
+        "Sunny Island WebBox",
+    }
+)
+RETIRED_URL_HINTS = (
+    "tesla_evtv_bms_v3",
+    "tesla_evtv_bms",
+    "sunny_island_detail",
+    "ha_sma_webbox",
+    "ha_addon_webbox",
+    "sma-webbox-dashboard",
+)
+LOVELACE_HISTORY_PANELS = frozenset({"sunny-island", "lovelace-sunny-island"})
+
+
+def addon_bare_slug(full_slug: str) -> str:
+    """Strip Supervisor repo prefix (local_ / core_ / 8-char git hash)."""
+    slug = (full_slug or "").strip()
+    if slug.startswith("local_"):
+        return slug[6:]
+    if slug.startswith("core_"):
+        return slug[5:]
+    prefix, sep, rest = slug.partition("_")
+    if sep and rest and len(prefix) == 8 and all(c in "0123456789abcdef" for c in prefix.lower()):
+        return rest
+    return slug
+
+
+def is_self_app(full_slug: str) -> bool:
+    return addon_bare_slug(full_slug) == "sunny_island"
+
+
+def is_retired_app(*, slug: str = "", name: str = "", url: str = "") -> bool:
+    """True for leftover plant apps that belong inside Sunny Island."""
+    if is_self_app(slug):
+        return False
+    bare = addon_bare_slug(slug)
+    if bare in RETIRED_APP_SLUGS:
+        return True
+    if (name or "").strip() in RETIRED_APP_NAMES:
+        return True
+    url_l = (url or "").lower()
+    if bare == "webbox" and (
+        (name or "").strip() in RETIRED_APP_NAMES
+        or any(hint in url_l for hint in RETIRED_URL_HINTS)
+    ):
+        return True
+    if any(hint in url_l for hint in RETIRED_URL_HINTS) and bare != "sunny_island":
+        return True
+    return False
+
+
+def is_retired_panel(panel_id: str, extra_slugs: set[str] | frozenset[str] = frozenset()) -> bool:
+    pid = (panel_id or "").strip()
+    if not pid or is_self_app(pid):
+        return False
+    if pid in LOVELACE_HISTORY_PANELS:
+        return True
+    if pid in extra_slugs:
+        return True
+    return is_retired_app(slug=pid)
+
 
 def _load_options() -> dict:
     defaults = {
         "auto_sync": True,
         "install_dashboard": True,
         "force_overwrite": False,
+        "retire_legacy_apps": True,
         "log_level": "info",
     }
     if not OPTIONS_PATH.is_file():
@@ -282,19 +359,16 @@ def _install_dashboards(*, force: bool) -> list[str]:
     except OSError as exc:
         actions.append(f"dashboard helpers failed: {exc}")
 
-    try:
-        actions.extend(_unify_ha_sidebar_entry())
-    except OSError as exc:
-        actions.append(f"sidebar unify failed: {exc}")
-
     return actions
 
 
-def _unify_ha_sidebar_entry() -> list[str]:
-    """Ensure only the Ingress plant UI appears as Sunny Island in the sidebar.
+def _unify_ha_sidebar_entry(
+    extra_panels: set[str] | frozenset[str] = frozenset(),
+) -> list[str]:
+    """Keep one sidebar entry: this app's Ingress plant UI.
 
-    - Lovelace ``sunny-island``: show_in_sidebar=false, title History
-    - User sidebar: hide ``sunny-island`` panel if still listed
+    Hides Lovelace History and leftover Ingress panels from retired plant apps
+    (Tesla EVTV BMS, Sunny Island Detail, WebBox, v3 monitor / combo apps).
     """
     actions: list[str] = []
     storage = HA_CONFIG / ".storage"
@@ -351,14 +425,31 @@ def _unify_ha_sidebar_entry() -> list[str]:
                 continue
             changed = False
             hidden = list(sidebar.get("hiddenPanels") or [])
-            if "sunny-island" not in hidden:
-                hidden.append("sunny-island")
+            order_keys = ("panelOrder", "order")
+            seen: list[str] = []
+            for key in order_keys:
+                seen.extend(str(x) for x in (sidebar.get(key) or []) if x)
+            seen.extend(str(x) for x in hidden if x)
+            to_hide = {
+                pid
+                for pid in seen
+                if is_retired_panel(pid, extra_panels)
+            }
+            to_hide.update(
+                pid for pid in extra_panels if pid and not is_self_app(pid)
+            )
+            to_hide.update(LOVELACE_HISTORY_PANELS)
+            for pid in sorted(to_hide):
+                if pid not in hidden:
+                    hidden.append(pid)
+                    changed = True
+            if hidden != list(sidebar.get("hiddenPanels") or []):
                 sidebar["hiddenPanels"] = hidden
-                changed = True
-            for key in ("panelOrder", "order"):
+            for key in order_keys:
                 order = list(sidebar.get(key) or [])
-                if "sunny-island" in order:
-                    sidebar[key] = [x for x in order if x != "sunny-island"]
+                filtered = [x for x in order if not is_retired_panel(str(x), extra_panels)]
+                if filtered != order:
+                    sidebar[key] = filtered
                     changed = True
             if changed:
                 ud.setdefault("data", {})["sidebar"] = sidebar
@@ -366,7 +457,7 @@ def _unify_ha_sidebar_entry() -> list[str]:
                     json.dumps(ud, indent=2, ensure_ascii=False) + "\n",
                     encoding="utf-8",
                 )
-                actions.append(f"hid sunny-island panel in {user_file.name}")
+                actions.append(f"hid leftover plant panels in {user_file.name}")
 
     if not actions:
         actions.append("sidebar unify: no HA storage changes needed")
@@ -428,6 +519,104 @@ def _ha_token() -> str:
         or os.environ.get("HASSIO_TOKEN")
         or ""
     ).strip()
+
+
+def _supervisor_request(
+    method: str, path: str, body: dict | None = None
+) -> dict | None:
+    """Call Supervisor; tolerate both raw and {result,data} envelopes."""
+    token = _ha_token()
+    if not token:
+        return None
+    data = None if body is None else json.dumps(body).encode()
+    req = urllib.request.Request(
+        f"http://supervisor{path}",
+        data=data,
+        method=method,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            raw_text = resp.read().decode()
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        print(f"[sunny_island] supervisor {method} {path}: {exc}")
+        return None
+    if not raw_text.strip():
+        return {}
+    try:
+        raw = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        print(f"[sunny_island] supervisor {method} {path}: {exc}")
+        return None
+    if not isinstance(raw, dict):
+        return None
+    if raw.get("result") == "error":
+        print(f"[sunny_island] supervisor {method} {path}: {raw.get('message')}")
+        return None
+    inner = raw.get("data")
+    return inner if isinstance(inner, dict) else raw
+
+
+def _listed_apps(payload: dict | None) -> list[dict]:
+    if not isinstance(payload, dict):
+        return []
+    addons = payload.get("addons")
+    if isinstance(addons, list):
+        return [a for a in addons if isinstance(a, dict)]
+    return []
+
+
+def _retire_legacy_apps() -> tuple[set[str], list[str]]:
+    """Stop leftover plant apps and drop their Ingress sidebar panels.
+
+    Does not uninstall — integration files and user options stay. Uninstall
+    the old apps in Settings → Apps after confirming this one is running.
+    """
+    actions: list[str] = []
+    extra_panels: set[str] = set()
+    payload = _supervisor_request("GET", "/addons")
+    if payload is None:
+        actions.append("legacy retire: Supervisor app list unavailable")
+        return extra_panels, actions
+
+    found = False
+    for app in _listed_apps(payload):
+        slug = str(app.get("slug") or "")
+        name = str(app.get("name") or "")
+        url = str(app.get("url") or "")
+        if not slug or is_self_app(slug) or not is_retired_app(slug=slug, name=name, url=url):
+            continue
+        if not app.get("installed", True):
+            continue
+        found = True
+        extra_panels.add(slug)
+        label = name or slug
+        if app.get("ingress_panel"):
+            opt = _supervisor_request(
+                "POST", f"/addons/{slug}/options", {"ingress_panel": False}
+            )
+            actions.append(
+                f"hid Ingress panel for {label}"
+                if opt is not None
+                else f"could not hide Ingress panel for {label} (uninstall it in Settings → Apps)"
+            )
+        state = str(app.get("state") or "")
+        if state in {"started", "running"}:
+            stopped = _supervisor_request("POST", f"/addons/{slug}/stop")
+            actions.append(
+                f"stopped retired app {label}"
+                if stopped is not None
+                else f"could not stop {label} — uninstall it in Settings → Apps"
+            )
+        else:
+            actions.append(f"retired app present (already stopped): {label}")
+
+    if not found:
+        actions.append("legacy retire: no leftover plant apps installed")
+    return extra_panels, actions
 
 
 def _enable_app_automations() -> list[str]:
@@ -595,6 +784,25 @@ def main() -> int:
         actions.append("auto_sync disabled — no files copied")
         print("[sunny_island] auto_sync=false")
 
+    extra_panels: set[str] = set()
+    if HA_CONFIG.is_dir() and bool(opts.get("retire_legacy_apps", True)):
+        try:
+            extra_panels, retire_msgs = _retire_legacy_apps()
+            actions.extend(retire_msgs)
+            for msg in retire_msgs:
+                print(f"[sunny_island] {msg}")
+        except OSError as exc:
+            actions.append(f"legacy app retire failed: {exc}")
+            print(f"[sunny_island] {actions[-1]}")
+    if HA_CONFIG.is_dir():
+        try:
+            for msg in _unify_ha_sidebar_entry(extra_panels=extra_panels):
+                actions.append(msg)
+                print(f"[sunny_island] {msg}")
+        except OSError as exc:
+            actions.append(f"sidebar unify failed: {exc}")
+            print(f"[sunny_island] {actions[-1]}")
+
     status = {
         "name": "Sunny Island",
         "addon_version": app_version,
@@ -617,9 +825,9 @@ def main() -> int:
             else [],
             "note": (
                 "One app: sidebar = Ingress plant UI only. "
-                "Lovelace sunny-island is History (show_in_sidebar false)."
+                "Lovelace History and retired plant apps are hidden."
             ),
-            "sidebar": "local_sunny_island (Ingress) — sole Sunny Island entry",
+            "sidebar": "sunny_island (Ingress) — sole Sunny Island entry",
         },
         "auto_sync": auto_sync,
         "install_dashboard": install_dashboard,
@@ -633,6 +841,7 @@ def main() -> int:
             "Merge dashboards/sunny_island/lovelace_include.yaml under lovelace.dashboards if desired",
             "Settings → Devices & services → Tesla EVTV BMS → Configure (WebBox host + Modbus)",
             "Restart HA Core after first integration install/update",
+            "Uninstall leftover plant apps (Tesla EVTV BMS, Detail, WebBox, v3 monitor)",
             "Examples: /config/sunny_island_examples/",
         ],
     }

@@ -33,6 +33,7 @@ options:
   auto_sync: true
   install_dashboard: true
   force_overwrite: false
+  retire_legacy_apps: true
   pack_prefix: battery_storage_tesla_pack
   envoy_prefix: sensor.envoy_122039004946
   ha_token: ""
@@ -45,6 +46,7 @@ schema:
   auto_sync: bool
   install_dashboard: bool
   force_overwrite: bool
+  retire_legacy_apps: bool
   pack_prefix: str
   envoy_prefix: str
   ha_token: password?
