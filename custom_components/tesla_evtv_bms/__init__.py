@@ -37,13 +37,17 @@ from .const import (
     SERVICE_SET_GRID_CONTROL,
     SERVICE_SET_SI_PARAMETER,
     SIGNAL_UPDATE_ENTITY,
+    SI_RPC_PARAM_BAT_TYP,
+    SI_RPC_PARAM_GRID,
 )
 from .parser import parse_udp_packet
 from .runtime import PackRuntime
 from .webbox import (
+    apply_bat_typ_optimistic,
     apply_grid_control_optimistic,
     async_poll_webbox,
     async_set_grid_control,
+    async_write_bat_typ_rpc,
     merge_modbus_without_clobbering_rpc_params,
 )
 from .webbox_modbus import (
@@ -107,6 +111,37 @@ async def _write_grid_control_for_runtime(
         # Push select state into HA immediately after optimistic write
         if getattr(sel, "hass", None) is not None:
             sel.async_write_ha_state()
+
+
+async def _write_bat_typ_for_runtime(
+    hass: HomeAssistant, rt: PackRuntime, value: str, *, skip_if_current: bool = False
+) -> None:
+    """RPC SetParameter BatTyp (menu 221.01). No Modbus register."""
+    cfg = rt.webbox
+    host = (cfg.get("host") or "").strip()
+    if not host:
+        raise HomeAssistantError("WebBox host not configured")
+    session = async_get_clientsession(hass)
+    device_key = (cfg.get("device_key") or rt.values.get("webbox_device_key") or "") or None
+    try:
+        ok = await async_write_bat_typ_rpc(
+            session,
+            host,
+            value,
+            password=cfg.get("password") or None,
+            device_key=device_key,
+            skip_if_current=skip_if_current,
+        )
+    except ValueError as err:
+        raise HomeAssistantError(str(err)) from err
+    if not ok:
+        raise HomeAssistantError(
+            f"BatTyp write failed on {host} (RPC SetParameter BatTyp)"
+        )
+    apply_bat_typ_optimistic(rt.values, value)
+    async_dispatcher_send(
+        hass, SIGNAL_UPDATE_ENTITY.format(rt.name), rt.values
+    )
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -192,8 +227,11 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         targets = await _webbox_targets(prefix, name_filter)
         param_key = str(param).strip().lower().replace(" ", "_").replace("-", "_")
         for rt in targets:
-            if param_key in ("grid_control", "grid", "gdmanstr"):
+            if param_key in SI_RPC_PARAM_GRID:
                 await _write_grid_control_for_runtime(hass, rt, str(value))
+                continue
+            if param_key in SI_RPC_PARAM_BAT_TYP:
+                await _write_bat_typ_for_runtime(hass, rt, str(value))
                 continue
             cfg = rt.webbox
             host = (cfg.get("host") or "").strip()
@@ -317,7 +355,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             values: dict = {}
             errors: list[str] = []
 
-            # HTTP/RPC overview + GetParameter (GdManStr grid control)
+            # HTTP/RPC overview + GetParameter (GdManStr + BatTyp)
             try:
                 http_vals = await async_poll_webbox(
                     session, webbox_host, webbox_password

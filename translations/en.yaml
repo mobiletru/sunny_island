@@ -45,5 +45,13 @@ configuration:
     description: >-
       WebBox RPC password (plain text; hashed by the integration). Applied
       to the BMS entry on start with webbox_host.
+  apply_bat_typ_liion_ext_bms:
+    name: Apply BatTyp LiIon_Ext-BMS (one-shot)
+    description: >-
+      When WebBox is configured, write Sunny Island menu 221.01 BatTyp to
+      LiIon_Ext-BMS (Tesla EVTV lithium pack with external BMS) via WebBox
+      JSON-RPC SetParameter. Skipped if already set. Off by default; enable
+      once for installer plants. Does not run every start after a successful
+      apply.
 network:
   8098/tcp: Plant UI (optional host mapping; prefer the Ingress sidebar)

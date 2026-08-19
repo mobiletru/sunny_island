@@ -74,6 +74,7 @@ If you previously installed **Sunny Island Detail**, **Tesla EVTV BMS**, **WebBo
 | `bms_udp_port` | `6550` | LiteCAN UDP listen port |
 | `webbox_host` | _(empty)_ | SMA WebBox IP — applied to the BMS entry on start |
 | `webbox_password` | _(empty)_ | WebBox RPC password — applied with `webbox_host` |
+| `apply_bat_typ_liion_ext_bms` | `false` | One-shot: set SI `BatTyp` to `LiIon_Ext-BMS` when WebBox is configured (skipped if already set) |
 
 ## Development
 

@@ -54,6 +54,9 @@ def _load_script(name: str):
 def test_default_cells_is_12s():
     assert const.DEFAULT_CELLS_IN_SERIES == 12
     assert const.DEFAULT_PORT == 6550
+    assert "webbox_bat_typ" in const.WEBBOX_SENSOR_KEYS
+    assert "bat_typ" in const.SI_RPC_PARAM_BAT_TYP
+    assert "battyp" in const.SI_RPC_PARAM_BAT_TYP
 
 
 def test_normalize_strips_webbox_url_and_prefix():
@@ -157,47 +160,8 @@ def test_render_config_rewrites_prefixes():
     assert "DISCHARGE_IS_NEGATIVE" in out
 
 
-def test_bms_flow_payload_defaults():
-    install = _load_script("install_integration.py")
-    payload = install._bms_flow_payload({})
-    assert payload["port"] == 6550
-    assert payload["entity_prefix"] == "battery_storage_tesla_pack"
-    assert payload["name"] == "Tesla Pack"
-    assert payload["cells_in_series"] == 12
-    assert payload["webbox_modbus"] is True
-    assert payload["webbox_host"] == ""
-
-
-def test_bms_flow_payload_from_options():
-    install = _load_script("install_integration.py")
-    payload = install._bms_flow_payload(
-        {
-            "pack_prefix": "battery_storage_tesla_pack",
-            "bms_udp_port": "6551",
-            "webbox_host": " 192.168.100.180 ",
-        }
-    )
-    assert payload["port"] == 6551
-    assert payload["webbox_host"] == "192.168.100.180"
-
-
-def test_ensure_packages_include_appends_when_missing():
-    install = _load_script("install_integration.py")
-    with tempfile.TemporaryDirectory() as td:
-        ha = Path(td)
-        install.HA_CONFIG = ha
-        cfg = ha / "configuration.yaml"
-        cfg.write_text("default_config:\n", encoding="utf-8")
-        msg = install._ensure_packages_include()
-        text = cfg.read_text(encoding="utf-8")
-        assert "include_dir_named packages" in text
-        assert "added" in msg
-        again = install._ensure_packages_include()
-        assert again == "packages include already present"
-
-
 def test_ha_token_falls_back_to_options():
-    install = _load_script("install_integration.py")
+    install = _load_script("bms_setup.py")
     saved = {
         k: os.environ.pop(k)
         for k in ("SUPERVISOR_TOKEN", "HASSIO_TOKEN")
@@ -208,3 +172,67 @@ def test_ha_token_falls_back_to_options():
         assert install._ha_token({"ha_token": "abc"}) == "abc"
     finally:
         os.environ.update(saved)
+
+
+def test_bms_setup_flow_payload_defaults():
+    setup = _load_script("bms_setup.py")
+    payload = setup._bms_flow_payload({})
+    assert payload["port"] == 6550
+    assert payload["entity_prefix"] == "battery_storage_tesla_pack"
+    assert payload["webbox_modbus"] is True
+    assert payload["webbox_host"] == ""
+
+
+def test_bms_setup_flow_payload_from_options():
+    setup = _load_script("bms_setup.py")
+    payload = setup._bms_flow_payload(
+        {
+            "pack_prefix": "battery_storage_tesla_pack",
+            "bms_udp_port": "6551",
+            "webbox_host": " 192.168.100.180 ",
+        }
+    )
+    assert payload["port"] == 6551
+    assert payload["webbox_host"] == "192.168.100.180"
+
+
+def test_bms_setup_packages_include_appends_when_missing():
+    setup = _load_script("bms_setup.py")
+    with tempfile.TemporaryDirectory() as td:
+        ha = Path(td)
+        setup.HA_CONFIG = ha
+        cfg = ha / "configuration.yaml"
+        cfg.write_text("default_config:\n", encoding="utf-8")
+        msg = setup._ensure_packages_include()
+        text = cfg.read_text(encoding="utf-8")
+        assert "include_dir_named packages" in text
+        assert "added" in msg
+        again = setup._ensure_packages_include()
+        assert again == "packages include already present"
+
+
+def test_bat_typ_oneshot_default_off_and_skip_if_applied():
+    setup = _load_script("bms_setup.py")
+    opts_off = {"webbox_host": "192.168.1.180"}
+    assert setup._bat_typ_oneshot_needed(opts_off, {}) is False
+    opts_on = {
+        "apply_bat_typ_liion_ext_bms": True,
+        "webbox_host": "192.168.1.180",
+    }
+    assert setup._bat_typ_oneshot_needed(opts_on, {}) is True
+    assert setup._bat_typ_oneshot_needed(opts_on, {"bat_typ_applied": "LiIon_Ext-BMS"}) is False
+    assert (
+        setup._bat_typ_oneshot_needed(
+            {"apply_bat_typ_liion_ext_bms": True, "webbox_host": ""}, {}
+        )
+        is False
+    )
+
+
+def test_bat_typ_already_liion_parse():
+    setup = _load_script("bms_setup.py")
+    assert setup._bat_typ_already_liion("LiIon_Ext-BMS") is True
+    assert setup._bat_typ_already_liion("liion_ext_bms") is True
+    assert setup._bat_typ_already_liion("VRLA") is False
+    assert setup._bat_typ_already_liion("unknown") is False
+    assert setup._bat_typ_already_liion(None) is False

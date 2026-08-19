@@ -35,19 +35,21 @@ set_grid_control:
 set_si_parameter:
   name: Set Sunny Island parameter
   description: >
-    Write a Sunny Island / WebBox Modbus parameter (unit 3). Used by the plant
-    app parameter buttons. Parameters: grid_control, reverse_feed,
-    power_setpoint_mode, discharge_limit, feed_soc_upper, feed_soc_lower,
-    power_setpoint_timeout. grid_control also tries RPC SetParameter GdManStr.
+    Write a Sunny Island parameter. Used by the plant app parameter buttons.
+    bat_typ and grid_control use WebBox JSON-RPC SetParameter (channels BatTyp
+    and GdManStr). Other ids write Modbus unit 3. Parameters: bat_typ,
+    grid_control, reverse_feed, power_setpoint_mode, discharge_limit,
+    feed_soc_upper, feed_soc_lower, power_setpoint_timeout.
   fields:
     parameter:
       name: Parameter
-      description: SI parameter id
+      description: SI parameter id (bat_typ / BatTyp = menu 221.01 battery type)
       required: true
-      example: reverse_feed
+      example: bat_typ
       selector:
         select:
           options:
+            - bat_typ
             - grid_control
             - reverse_feed
             - power_setpoint_mode
@@ -58,10 +60,11 @@ set_si_parameter:
     value:
       name: Value
       description: >
-        Enum option (yes/no, off/manual_w/manual_pct/external, manual_on/automatic)
-        or integer (limits 0–100, timeout seconds)
+        BatTyp: LiIon_Ext-BMS (Tesla EVTV) | VRLA | FLA | NiCd | Other.
+        Other enums: yes/no, off/manual_w/manual_pct/external, manual_on/automatic.
+        Or integer (limits 0–100, timeout seconds).
       required: true
-      example: "yes"
+      example: "LiIon_Ext-BMS"
       selector:
         text:
     entity_prefix:

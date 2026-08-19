@@ -928,9 +928,11 @@ views:
             name: Operating
 
       - type: entities
-        title: SI parameters (Modbus / limits)
+        title: SI parameters (RPC BatTyp + Modbus limits)
         show_header_toggle: false
         entities:
+          - entity: sensor.battery_storage_tesla_pack_webbox_bat_typ
+            name: BatTyp (221.01)
           - entity: sensor.battery_storage_tesla_pack_webbox_discharge_limit
             name: Discharge limit
           - entity: sensor.battery_storage_tesla_pack_webbox_reverse_feed

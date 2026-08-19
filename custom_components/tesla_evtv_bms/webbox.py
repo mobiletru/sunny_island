@@ -94,6 +94,22 @@ GRID_MAN_STR_LABELS: dict[str, str] = {
     "Stop": "Off",
 }
 
+# SI parameter: battery type (GetParameter / SetParameter).
+# Official SI 5048U firmware 7.304/7.300 channel list (menu 221.01 BatTyp,
+# also QCG 003.07): --- · VRLA · FLA · NiCd · LiIon_Ext-BMS · Other.
+# Tesla EVTV lithium pack with external BMS uses LiIon_Ext-BMS.
+# RPC-only — no documented Modbus holding register in this repo / SMA public docs.
+BAT_TYP_CHANNEL = "BatTyp"
+BAT_TYP_LIION_EXT_BMS = "LiIon_Ext-BMS"
+BAT_TYP_VALUES = ("VRLA", "FLA", "NiCd", "LiIon_Ext-BMS", "Other")
+BAT_TYP_LABELS: dict[str, str] = {
+    "VRLA": "VRLA",
+    "FLA": "FLA",
+    "NiCd": "NiCd",
+    "LiIon_Ext-BMS": "Lithium (ext. BMS)",
+    "Other": "Other",
+}
+
 
 def webbox_password_hash(password: str) -> str:
     """MD5 hash of the WebBox access-level password, per the RPC spec."""
@@ -278,8 +294,68 @@ def apply_grid_man_str(values: dict[str, Any], raw: str | None) -> None:
     values["webbox_grid_control_code"] = GRID_MAN_STR_TO_CODE[man]
 
 
+def normalize_bat_typ(value: str | None) -> str | None:
+    """Normalize a BatTyp value or alias to an official firmware option.
+
+    Official strings (SI 5048U 7.304/7.300): VRLA, FLA, NiCd, LiIon_Ext-BMS, Other.
+    ``---`` / empty is treated as unset. Tesla EVTV aliases map to LiIon_Ext-BMS.
+    """
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw or raw in ("---", "-", "-----"):
+        return None
+    for opt in BAT_TYP_VALUES:
+        if raw == opt or raw.lower() == opt.lower():
+            return opt
+    key = raw.lower().replace(" ", "_").replace("-", "_")
+    aliases = {
+        "liion_ext_bms": BAT_TYP_LIION_EXT_BMS,
+        "liion_extbms": BAT_TYP_LIION_EXT_BMS,
+        "liion": BAT_TYP_LIION_EXT_BMS,
+        "lithium": BAT_TYP_LIION_EXT_BMS,
+        "lithium_ext_bms": BAT_TYP_LIION_EXT_BMS,
+        "tesla": BAT_TYP_LIION_EXT_BMS,
+        "evtv": BAT_TYP_LIION_EXT_BMS,
+        "tesla_evtv": BAT_TYP_LIION_EXT_BMS,
+        "vrla": "VRLA",
+        "fla": "FLA",
+        "nicd": "NiCd",
+        "ni_cd": "NiCd",
+        "other": "Other",
+    }
+    return aliases.get(key)
+
+
+def apply_bat_typ(values: dict[str, Any], raw: str | None) -> None:
+    """Fill webbox_bat_typ from a BatTyp RPC value."""
+    typ = normalize_bat_typ(raw)
+    if typ is None:
+        return
+    values["webbox_bat_typ"] = typ
+
+
+def apply_bat_typ_optimistic(values: dict[str, Any], value: str) -> str:
+    """Update runtime values after a successful BatTyp write; returns official string."""
+    typ = value_to_bat_typ(value)
+    apply_bat_typ(values, typ)
+    return typ
+
+
+def value_to_bat_typ(value: str) -> str:
+    """Resolve set_si_parameter bat_typ value → official BatTyp string."""
+    typ = normalize_bat_typ(value)
+    if typ is None:
+        raise ValueError(
+            f"Unknown BatTyp {value!r}; "
+            f"use one of {', '.join(BAT_TYP_VALUES)} "
+            f"(Tesla EVTV: {BAT_TYP_LIION_EXT_BMS})"
+        )
+    return typ
+
+
 def parse_rpc_parameters(body: str) -> dict[str, Any]:
-    """Map GetParameter / SetParameter channels (e.g. GdManStr) to sensors."""
+    """Map GetParameter / SetParameter channels (GdManStr, BatTyp) to sensors."""
     envelope = _parse_rpc_envelope(body)
     if not envelope or "error" in envelope:
         return {}
@@ -300,6 +376,8 @@ def parse_rpc_parameters(body: str) -> dict[str, Any]:
                 continue
             if meta == GRID_MAN_STR_CHANNEL:
                 apply_grid_man_str(out, str(value))
+            elif meta == BAT_TYP_CHANNEL:
+                apply_bat_typ(out, str(value))
     return out
 
 
@@ -435,9 +513,12 @@ async def async_poll_webbox(session, host: str, password: str | None) -> dict:
                 rpc_ok = True
                 values["webbox_rpc_status"] = "ok"
 
-            # 2b) Grid start parameter (GdManStr) — real control on SI6048 WebBox.
+            # 2b) SI parameters (GdManStr + BatTyp) — official WebBox RPC channels.
             # GetParameter requires channels as plain string names (not {meta:…}
             # objects — those return "Error building response" on SI6048UM).
+            # If the combined request fails (older firmware without BatTyp),
+            # retry GdManStr alone so grid control keeps working.
+            gp_channels = [GRID_MAN_STR_CHANNEL, BAT_TYP_CHANNEL]
             gp_body, _ = await _rpc_call(
                 session,
                 host,
@@ -447,18 +528,38 @@ async def async_poll_webbox(session, host: str, password: str | None) -> dict:
                     "devices": [
                         {
                             "key": device_key,
-                            "channels": [GRID_MAN_STR_CHANNEL],
+                            "channels": gp_channels,
                         }
                     ]
                 },
                 timeout=15,
             )
-            if gp_body:
+            params: dict[str, Any] = {}
+            envelope = _parse_rpc_envelope(gp_body or "")
+            if gp_body and envelope and "error" not in envelope:
                 params = parse_rpc_parameters(gp_body)
-                if params:
-                    values.update(params)
-                    rpc_ok = True
-                    values["webbox_rpc_status"] = "ok"
+            if not params:
+                gp_body, _ = await _rpc_call(
+                    session,
+                    host,
+                    "GetParameter",
+                    password=password,
+                    params={
+                        "devices": [
+                            {
+                                "key": device_key,
+                                "channels": [GRID_MAN_STR_CHANNEL],
+                            }
+                        ]
+                    },
+                    timeout=15,
+                )
+                if gp_body:
+                    params = parse_rpc_parameters(gp_body)
+            if params:
+                values.update(params)
+                rpc_ok = True
+                values["webbox_rpc_status"] = "ok"
 
     # 3) home.ajax fallback for core power/yield if still missing
     try:
@@ -581,6 +682,133 @@ async def async_write_grid_control_rpc(
     return True
 
 
+async def _resolve_si_device_key(
+    session,
+    host: str,
+    *,
+    password: str | None,
+    device_key: str | None,
+) -> str | None:
+    """Return a Sunny Island WebBox device key, discovering via GetDevices."""
+    key = (device_key or "").strip() or None
+    if key:
+        return key
+    dev_body, status = await _rpc_call(
+        session, host, "GetDevices", password=password
+    )
+    devices = parse_rpc_devices(dev_body or "")
+    si_keys = [k for k in devices if k.upper().startswith("SI")]
+    targets = si_keys or devices
+    if not targets:
+        _LOGGER.warning(
+            "WebBox RPC: no devices on %s (%s)", host, status
+        )
+        return None
+    return targets[0]
+
+
+async def async_write_bat_typ_rpc(
+    session,
+    host: str,
+    value: str,
+    *,
+    password: str | None = None,
+    device_key: str | None = None,
+    skip_if_current: bool = False,
+) -> bool:
+    """Write SI BatTyp via WebBox SetParameter (official firmware strings).
+
+    Same path as GdManStr. No Modbus register is used — none is documented
+    in this repo or SMA public docs for BatTyp.
+    """
+    typ = value_to_bat_typ(value)
+    host = (host or "").strip()
+    if not host:
+        raise ValueError("WebBox host is empty")
+
+    key = await _resolve_si_device_key(
+        session, host, password=password, device_key=device_key
+    )
+    if not key:
+        return False
+
+    if skip_if_current:
+        gp_body, _ = await _rpc_call(
+            session,
+            host,
+            "GetParameter",
+            password=password,
+            params={
+                "devices": [{"key": key, "channels": [BAT_TYP_CHANNEL]}]
+            },
+            timeout=15,
+        )
+        current = parse_rpc_parameters(gp_body or "").get("webbox_bat_typ")
+        if current == typ:
+            _LOGGER.info(
+                "WebBox BatTyp already %s on %s device=%s — skip write",
+                typ,
+                host,
+                key,
+            )
+            return True
+
+    body, status = await _rpc_call(
+        session,
+        host,
+        "SetParameter",
+        password=password,
+        params={
+            "devices": [
+                {
+                    "key": key,
+                    "channels": [{"meta": BAT_TYP_CHANNEL, "value": typ}],
+                }
+            ]
+        },
+        timeout=20,
+    )
+    if not body:
+        _LOGGER.warning(
+            "WebBox BatTyp RPC write failed value=%s host=%s status=%s",
+            typ,
+            host,
+            status,
+        )
+        return False
+
+    envelope = _parse_rpc_envelope(body)
+    if not envelope or "error" in envelope:
+        err = (envelope or {}).get("error") if isinstance(envelope, dict) else None
+        _LOGGER.warning(
+            "WebBox BatTyp RPC error value=%s host=%s err=%s body=%s",
+            typ,
+            host,
+            err,
+            (body or "")[:200],
+        )
+        return False
+
+    parsed = parse_rpc_parameters(body)
+    echoed = parsed.get("webbox_bat_typ")
+    if echoed and echoed != typ:
+        _LOGGER.warning(
+            "WebBox BatTyp RPC wrote %s but device returned %s on %s",
+            typ,
+            echoed,
+            host,
+        )
+        return False
+
+    _LOGGER.info(
+        "WebBox BatTyp RPC → BatTyp=%s on %s device=%s",
+        typ,
+        host,
+        key,
+    )
+    return True
+
+
 # Keys sourced from GetParameter / SetParameter — prefer over Modbus when present.
 RPC_PARAMETER_KEYS = frozenset(
     {
@@ -588,6 +816,7 @@ RPC_PARAMETER_KEYS = frozenset(
         "webbox_grid_control_option",
         "webbox_grid_control",
         "webbox_grid_control_code",
+        "webbox_bat_typ",
     }
 )
 
@@ -595,11 +824,25 @@ RPC_PARAMETER_KEYS = frozenset(
 def merge_modbus_without_clobbering_rpc_params(
     http_values: dict[str, Any], mb_values: dict[str, Any]
 ) -> dict[str, Any]:
-    """Merge Modbus onto HTTP/RPC; keep RPC parameter-sourced grid control."""
+    """Merge Modbus onto HTTP/RPC; keep RPC parameter-sourced values."""
     out = dict(http_values)
-    protect = bool(out.get("webbox_grid_man_str") or out.get("webbox_grid_control_option"))
+    protect = {
+        key
+        for key in RPC_PARAMETER_KEYS
+        if out.get(key) not in (None, "")
+    }
+    # Mixed grid-control sources are worse than leaving Modbus 40527 unused.
+    if out.get("webbox_grid_man_str") or out.get("webbox_grid_control_option"):
+        protect.update(
+            {
+                "webbox_grid_man_str",
+                "webbox_grid_control_option",
+                "webbox_grid_control",
+                "webbox_grid_control_code",
+            }
+        )
     for key, val in mb_values.items():
-        if protect and key in RPC_PARAMETER_KEYS:
+        if key in protect:
             continue
         out[key] = val
     return out

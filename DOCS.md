@@ -81,6 +81,30 @@ data:
   mode: manual_on   # start / request grid (GdManStr=Start)
 ```
 
+### Battery type (BatTyp — Tesla EVTV lithium / external BMS)
+
+Official SI firmware (5048U **7.304 / 7.300**, menu **221.01 BatTyp**, also
+QCG **003.07**) lists: `---` · `VRLA` · `FLA` · `NiCd` · **`LiIon_Ext-BMS`** ·
+`Other`. This plant uses **`LiIon_Ext-BMS`**.
+
+Writes use the same WebBox JSON-RPC **`SetParameter`** path as `GdManStr`
+(channel name **`BatTyp`**). There is no documented Modbus register for this
+parameter in this repo or SMA public docs — the app does not invent one.
+
+| Entity / service | Role |
+|------------------|------|
+| `sensor.<prefix>_webbox_bat_typ` | Current BatTyp from **GetParameter** |
+| Service `tesla_evtv_bms.set_si_parameter` | `parameter: bat_typ`, `value: LiIon_Ext-BMS` |
+| Plant UI · Battery type | Buttons for official firmware values |
+| Add-on option `apply_bat_typ_liion_ext_bms` | **Off** by default; one-shot apply when WebBox is configured (skips if already set) |
+
+```yaml
+service: tesla_evtv_bms.set_si_parameter
+data:
+  parameter: bat_typ
+  value: LiIon_Ext-BMS
+```
+
 > If the write fails: enable **RPC** on the WebBox, confirm the password, and
 > check unit ID **3** is the SI when using the Modbus fallback.
 

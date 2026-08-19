@@ -514,6 +514,15 @@
               else if (v === 'manual_pct')
                 active = raw.includes('%') || raw.includes('percent') || raw.includes('pct');
               else if (v === 'external') active = raw.includes('external');
+            } else if (ctrl.id === 'bat_typ') {
+              const norm = raw.replace(/\s+/g, '_');
+              active =
+                norm === v.toLowerCase() ||
+                (v === 'liion_ext-bms' &&
+                  (norm.includes('liion') ||
+                    norm.includes('lithium') ||
+                    norm.includes('tesla') ||
+                    norm.includes('evtv')));
             } else {
               active = raw === v || raw.includes(v);
             }

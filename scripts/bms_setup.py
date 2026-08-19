@@ -378,9 +378,14 @@ def _ensure_bms_entry(opts: dict, *, wait: bool = False) -> list[str]:
     ``webbox_password`` onto it — auto-setup used to create the entry once
     with an empty host and never update it, which left WebBox sensors dead.
     """
-    if not bool(opts.get("auto_setup_bms", True)):
-        return ["auto_setup_bms disabled"]
     token = _ha_token(opts)
+    if not bool(opts.get("auto_setup_bms", True)):
+        msgs = ["auto_setup_bms disabled"]
+        if token:
+            bat = _apply_bat_typ_oneshot(opts, token)
+            if bat:
+                msgs.append(bat)
+        return msgs
     if not token:
         return ["skip BMS setup (no SUPERVISOR_TOKEN / ha_token)"]
 
@@ -393,13 +398,100 @@ def _ensure_bms_entry(opts: dict, *, wait: bool = False) -> list[str]:
             sync = _sync_webbox_on_existing_entry(opts, token)
             if sync:
                 msgs.append(sync)
+            bat = _apply_bat_typ_oneshot(opts, token)
+            if bat:
+                msgs.append(bat)
             return msgs
         if _bms_component_loaded(token):
-            return [_create_bms_config_entry(opts, token)]
+            created = _create_bms_config_entry(opts, token)
+            msgs = [created]
+            bat = _apply_bat_typ_oneshot(opts, token)
+            if bat:
+                msgs.append(bat)
+            return msgs
         last = _request_core_restart(token)
         if not wait or time.monotonic() >= deadline:
             return [last]
         time.sleep(5)
+
+
+BAT_TYP_LIION_EXT_BMS = "LiIon_Ext-BMS"
+
+
+def _bat_typ_already_liion(state: str | None) -> bool:
+    """True when a HA sensor state already reads official LiIon_Ext-BMS."""
+    if state is None:
+        return False
+    raw = str(state).strip()
+    if not raw or raw.lower() in ("unknown", "unavailable", "none", "—", "-"):
+        return False
+    key = raw.lower().replace(" ", "_").replace("-", "_")
+    return key in (
+        "liion_ext_bms",
+        "liion_extbms",
+        "liion",
+        "lithium",
+        "lithium_ext_bms",
+    ) or raw == BAT_TYP_LIION_EXT_BMS
+
+
+def _bat_typ_oneshot_needed(opts: dict, flag: dict) -> bool:
+    """One-shot installer hook: default off; skip if already applied or no WebBox."""
+    if not bool(opts.get("apply_bat_typ_liion_ext_bms", False)):
+        return False
+    if not str(opts.get("webbox_host") or "").strip():
+        return False
+    return not bool(flag.get("bat_typ_applied"))
+
+
+def _remember_bat_typ_applied() -> None:
+    state = _load_bms_flag()
+    state["bat_typ_applied"] = BAT_TYP_LIION_EXT_BMS
+    _save_bms_flag(state)
+
+
+def _apply_bat_typ_oneshot(opts: dict, token: str) -> str | None:
+    """Write BatTyp=LiIon_Ext-BMS once via set_si_parameter if not already set."""
+    flag = _load_bms_flag()
+    if not _bat_typ_oneshot_needed(opts, flag):
+        return None
+    prefix = str(opts.get("pack_prefix") or "battery_storage_tesla_pack").strip()
+    eid = f"sensor.{prefix}_webbox_bat_typ"
+    current = None
+    try:
+        st = _ha_api(f"/states/{eid}", token=token)
+        if isinstance(st, dict):
+            current = st.get("state")
+    except urllib.error.HTTPError as exc:
+        if exc.code != 404:
+            return f"BatTyp oneshot state read failed HTTP {exc.code}"
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+        return f"BatTyp oneshot state read failed: {exc}"
+
+    if _bat_typ_already_liion(current if isinstance(current, str) else None):
+        _remember_bat_typ_applied()
+        return f"BatTyp already {BAT_TYP_LIION_EXT_BMS} — skip write"
+
+    try:
+        _ha_api(
+            "/services/tesla_evtv_bms/set_si_parameter",
+            token=token,
+            method="POST",
+            body={
+                "parameter": "bat_typ",
+                "value": BAT_TYP_LIION_EXT_BMS,
+                "entity_prefix": prefix,
+            },
+            timeout=30,
+        )
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace") if hasattr(exc, "read") else str(exc)
+        return f"BatTyp oneshot write failed HTTP {exc.code}: {body[:200]}"
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+        return f"BatTyp oneshot write failed: {exc}"
+
+    _remember_bat_typ_applied()
+    return f"applied BatTyp={BAT_TYP_LIION_EXT_BMS} via set_si_parameter"
 
 
 def _load_options() -> dict:
@@ -412,6 +504,7 @@ def _load_options() -> dict:
         "bms_udp_port": 6550,
         "webbox_host": "",
         "webbox_password": "",
+        "apply_bat_typ_liion_ext_bms": False,
         "pack_prefix": "battery_storage_tesla_pack",
         "ha_token": "",
     }
