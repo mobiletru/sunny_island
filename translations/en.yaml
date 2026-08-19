@@ -38,12 +38,13 @@ configuration:
   webbox_host:
     name: SMA WebBox host
     description: >-
-      WebBox IP or hostname. Applied to the Tesla EVTV BMS config entry on
-      start (fills an empty host; updates when this option changes).
+      WebBox IP or hostname. Written onto the Tesla EVTV BMS entry on start
+      via tesla_evtv_bms.set_webbox. Empty does not clear a host set in
+      Configure.
   webbox_password:
     name: SMA WebBox password
     description: >-
       WebBox RPC password (plain text; hashed by the integration). Applied
-      to the BMS entry on start with webbox_host.
+      with webbox_host; empty does not clear a password set in Configure.
 network:
   8098/tcp: Plant UI (optional host mapping; prefer the Ingress sidebar)

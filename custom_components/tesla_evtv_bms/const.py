@@ -82,11 +82,15 @@ WEBBOX_SENSOR_KEYS = (
 SERVICE_SET_GRID_CONTROL = "set_grid_control"
 # Service: tesla_evtv_bms.set_si_parameter — write SI Modbus params from plant UI
 SERVICE_SET_SI_PARAMETER = "set_si_parameter"
+# Service: tesla_evtv_bms.set_webbox — overlay host/password onto entry.data
+SERVICE_SET_WEBBOX = "set_webbox"
 ATTR_MODE = "mode"
 ATTR_PARAMETER = "parameter"
 ATTR_VALUE = "value"
 ATTR_DEVICE_ID = "device_id"
 ATTR_ENTRY_ID = "entry_id"
+ATTR_HOST = "host"
+ATTR_PASSWORD = "password"
 
 
 def pack_config_from_data(data: dict) -> dict:
@@ -146,3 +150,30 @@ def normalize_entry_data(
         base[CONF_PORT] = int(base[CONF_PORT])
 
     return base
+
+
+def webbox_data_updates(
+    existing: dict,
+    *,
+    host: str | None = None,
+    password: str | None = None,
+) -> dict:
+    """WebBox fields to write onto entry.data, or {} if nothing changes.
+
+    Empty host/password are omitted so a caller cannot wipe a UI-set value.
+    Host is normalized the same way as config flow (strip URL, path).
+    """
+    overlay: dict = {}
+    if host is not None and str(host).strip():
+        overlay[CONF_WEBBOX_HOST] = host
+    if password is not None and str(password).strip():
+        overlay[CONF_WEBBOX_PASSWORD] = password
+    if not overlay:
+        return {}
+    current = normalize_entry_data({}, existing=dict(existing), preserve_port=True)
+    merged = normalize_entry_data(overlay, existing=dict(existing), preserve_port=True)
+    return {
+        key: merged[key]
+        for key in overlay
+        if merged.get(key) != current.get(key)
+    }

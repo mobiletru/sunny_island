@@ -1,3 +1,32 @@
+set_webbox:
+  name: Set WebBox host
+  description: >
+    Write SMA WebBox host and/or password onto the Tesla EVTV BMS config
+    entry. Empty fields are left unchanged (will not clear a host set in
+    Configure). Reloads the integration only when a value actually changes.
+  fields:
+    host:
+      name: Host
+      description: WebBox IP or hostname (http(s) and path are stripped)
+      required: false
+      example: "192.168.1.180"
+      selector:
+        text:
+    password:
+      name: Password
+      description: WebBox RPC password (plain text; hashed by the integration)
+      required: false
+      example: sma
+      selector:
+        text:
+          type: password
+    entry_id:
+      name: Config entry ID
+      description: Optional; defaults to every Tesla EVTV BMS entry
+      required: false
+      selector:
+        text:
+
 set_grid_control:
   name: Set WebBox grid control
   description: >
