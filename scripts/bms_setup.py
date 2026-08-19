@@ -112,8 +112,13 @@ def _bms_flow_payload(opts: dict) -> dict:
 
 
 def _bms_component_loaded(token: str) -> bool:
+    """True when Core can start a tesla_evtv_bms config flow.
+
+    Config-flow integrations do not appear in /api/components until an
+    entry exists, so we must not use that list (it caused restart loops).
+    """
     try:
-        components = _ha_api("/components", token=token)
+        handlers = _ha_api("/config/config_entries/flow_handlers", token=token)
     except (
         urllib.error.URLError,
         urllib.error.HTTPError,
@@ -122,12 +127,9 @@ def _bms_component_loaded(token: str) -> bool:
         json.JSONDecodeError,
     ):
         return False
-    if not isinstance(components, list):
+    if not isinstance(handlers, list):
         return False
-    return any(
-        str(c) == "tesla_evtv_bms" or str(c).startswith("tesla_evtv_bms.")
-        for c in components
-    )
+    return "tesla_evtv_bms" in handlers
 
 
 def _bms_already_configured(token: str, prefix: str) -> bool:
@@ -214,10 +216,13 @@ def _request_core_restart(token: str) -> str:
             token=token,
             method="POST",
             body={},
-            timeout=8,
+            timeout=3,
         )
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as exc:
-        return f"could not restart Core: {exc}"
+        if "timed out" in str(exc).lower() or "timeout" in str(exc).lower():
+            pass
+        else:
+            return f"could not restart Core: {exc}"
     state["restart_requested_at"] = now
     try:
         BMS_FLAG.parent.mkdir(parents=True, exist_ok=True)
@@ -273,6 +278,10 @@ def _load_options() -> dict:
 
 def _ensure_bms_cli() -> int:
     """Background: wait for Core, then create Tesla EVTV BMS entry."""
+    try:
+        print(f"[sunny_island] {_ensure_packages_include()}")
+    except OSError as exc:
+        print(f"[sunny_island] WARN: packages include failed: {exc}")
     opts = _load_options()
     for msg in _ensure_bms_entry(opts, wait=True):
         print(f"[sunny_island] {msg}")
