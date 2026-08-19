@@ -97,5 +97,25 @@
         }
       }
     }
+  },
+  "services": {
+    "set_webbox": {
+      "name": "Set WebBox host",
+      "description": "Overlay WebBox host/password onto the Tesla EVTV BMS entry. Empty fields are left unchanged.",
+      "fields": {
+        "host": {
+          "name": "Host",
+          "description": "WebBox IP or hostname."
+        },
+        "password": {
+          "name": "Password",
+          "description": "WebBox RPC password (plain text)."
+        },
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "Optional; defaults to every Tesla EVTV BMS entry."
+        }
+      }
+    }
   }
 }
