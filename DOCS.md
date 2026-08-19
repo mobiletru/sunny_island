@@ -46,7 +46,8 @@ WebBox is built into the **Tesla EVTV BMS** integration (Sunny Island app):
    - **Password** (optional; JSON-RPC only — default access is often `sma`)
    - **Enable WebBox Modbus TCP** (default on), port **502**
    - Unit IDs: gateway **1**, plant **2**, device/SI **3**
-   App options are applied to an existing BMS entry on start (not only on first create).
+   App options overlay an existing BMS entry on start via `tesla_evtv_bms.set_webbox`
+   (empty app fields never clear a host set in Configure).
 3. Restart Core after first install of the custom component
 
 Creates `sensor.<pack_prefix>_webbox_*` — plant power/yields, grid V/Hz, SI battery V/temp/SoC, status, reactive/apparent, serials, **grid start** sensors (connection timer, operating status, generator status, grid control mode).
