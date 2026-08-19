@@ -4,7 +4,7 @@ ARG BUILD_FROM=ghcr.io/home-assistant/base:3.21
 FROM ${BUILD_FROM}
 
 ARG BUILD_ARCH=amd64
-ARG BUILD_VERSION=2.2.11
+ARG BUILD_VERSION=2.2.12
 
 LABEL \
     io.hass.name="Sunny Island" \
@@ -41,8 +41,8 @@ ENV SI_APP_VERSION=${BUILD_VERSION}
 
 RUN sed -i 's/\r$//' /run.sh \
     && chmod a+x /run.sh \
-    && mkdir -p /run/nginx /var/lib/nginx/tmp /var/log/nginx /tmp/nginx \
-    && chown -R nginx:nginx /var/lib/nginx /var/log/nginx /run/nginx /tmp/nginx \
+    && mkdir -p /run/nginx /tmp/nginx \
+    && chown -R nginx:nginx /run/nginx /tmp/nginx \
     && python3 -m py_compile /opt/sunny_island/render_config.py \
     && python3 -m py_compile /opt/sunny_island/install_integration.py \
     && nginx -t \

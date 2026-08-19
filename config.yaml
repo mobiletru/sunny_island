@@ -1,5 +1,5 @@
 name: Sunny Island
-version: "2.2.11"
+version: "2.2.12"
 slug: sunny_island
 description: >-
   One plant app: Tesla EVTV BMS + Ingress UI (parameter buttons, wrench quirks,
@@ -37,6 +37,10 @@ options:
   envoy_prefix: sensor.envoy_122039004946
   ha_token: ""
   log_level: info
+  auto_setup_bms: true
+  bms_udp_port: 6550
+  webbox_host: ""
+  webbox_password: ""
 schema:
   auto_sync: bool
   install_dashboard: bool
@@ -45,3 +49,7 @@ schema:
   envoy_prefix: str
   ha_token: password?
   log_level: list(trace|debug|info|notice|warning|error|fatal)
+  auto_setup_bms: bool
+  bms_udp_port: int
+  webbox_host: str?
+  webbox_password: password?
