@@ -37,9 +37,13 @@ configuration:
     description: LiteCAN UDP listen port (EVTV default 6550).
   webbox_host:
     name: SMA WebBox host
-    description: Optional WebBox IP or hostname stored on the BMS config entry.
+    description: >-
+      WebBox IP or hostname. Applied to the Tesla EVTV BMS config entry on
+      start (fills an empty host; updates when this option changes).
   webbox_password:
     name: SMA WebBox password
-    description: Optional WebBox RPC password (plain text; hashed by the integration).
+    description: >-
+      WebBox RPC password (plain text; hashed by the integration). Applied
+      to the BMS entry on start with webbox_host.
 network:
   8098/tcp: Plant UI (optional host mapping; prefer the Ingress sidebar)
