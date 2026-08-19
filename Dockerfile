@@ -34,6 +34,8 @@ COPY rootfs/www /opt/sunny_island/www
 COPY rootfs/etc/nginx/nginx.conf /etc/nginx/nginx.conf
 COPY scripts/render_config.py /opt/sunny_island/render_config.py
 COPY scripts/install_integration.py /opt/sunny_island/install_integration.py
+COPY scripts/bms_setup.py /opt/sunny_island/bms_setup.py
+COPY scripts/http_server.py /opt/sunny_island/http_server.py
 COPY APP_VERSION /opt/sunny_island/APP_VERSION
 COPY run.sh /run.sh
 
@@ -45,7 +47,8 @@ RUN sed -i 's/\r$//' /run.sh \
     && chown -R nginx:nginx /run/nginx /tmp/nginx \
     && python3 -m py_compile /opt/sunny_island/render_config.py \
     && python3 -m py_compile /opt/sunny_island/install_integration.py \
-    && nginx -t \
+    && python3 -m py_compile /opt/sunny_island/bms_setup.py \
+    && python3 -m py_compile /opt/sunny_island/http_server.py \
     && test -f /opt/sunny_island/custom_components/tesla_evtv_bms/manifest.json
 
 EXPOSE 8098

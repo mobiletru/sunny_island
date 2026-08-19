@@ -22,11 +22,8 @@ python3 /opt/sunny_island/install_integration.py || echo "[sunny_island] integra
 echo "[sunny_island] rendering plant UI config"
 python3 /opt/sunny_island/render_config.py
 
-# HAOS AppArmor (and the default add-on profile) cannot create
-# /var/lib/nginx or /var/log/nginx. nginx.conf uses /tmp + /run only.
-mkdir -p /run/nginx /tmp/nginx
-echo "[sunny_island] nginx :8098 (Ingress plant UI)"
-# Finish Tesla EVTV BMS config-entry setup after nginx is listening so
+echo "[sunny_island] plant UI :8098 (Ingress)"
+# Finish Tesla EVTV BMS config-entry setup after the UI is listening so
 # a Core restart / slow API does not keep Ingress down.
-python3 /opt/sunny_island/install_integration.py --ensure-bms &
-exec nginx -g 'daemon off;'
+python3 /opt/sunny_island/bms_setup.py --ensure-bms &
+exec python3 /opt/sunny_island/http_server.py

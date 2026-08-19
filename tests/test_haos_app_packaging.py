@@ -22,6 +22,8 @@ def test_config_yaml_required_app_keys():
     text = _read("config.yaml")
     assert 'name: Sunny Island' in text
     assert 'version: "2.2.13"' in text
+    assert "auto_setup_bms: true" in text
+    assert "bms_udp_port: 6550" in text
     assert "slug: sunny_island" in text
     assert "aarch64" in text and "amd64" in text
     assert "ingress: true" in text
@@ -89,3 +91,27 @@ def test_ingress_nginx_allows_supervisor_only():
     assert "allow 127.0.0.1" in text
     assert "deny all" in text
     assert "listen 8098" in text
+    assert "error_log /dev/stderr" in text
+    assert "pid /tmp/nginx/nginx.pid" in text
+    assert "/var/log/nginx" not in text
+    assert "/var/lib/nginx" not in text
+
+
+def test_run_sh_avoids_readonly_nginx_dirs():
+    text = _read("run.sh")
+    mkdir_lines = [
+        line for line in text.splitlines() if line.strip().startswith("mkdir")
+    ]
+    assert mkdir_lines
+    joined = "\n".join(mkdir_lines)
+    assert "/var/lib/nginx" not in joined
+    assert "/var/log/nginx" not in joined
+    assert "mkdir -p /run/nginx /tmp/nginx" in text
+    assert "with-contenv" in text
+    assert "--ensure-bms" in text
+
+
+def test_translations_cover_bms_schema_keys():
+    text = _read("translations/en.yaml")
+    for key in ("auto_setup_bms", "bms_udp_port", "webbox_host", "webbox_password"):
+        assert f"{key}:" in text

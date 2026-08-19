@@ -11,8 +11,16 @@
 
 ## 2.2.12
 
-- Ingress nginx crash fix (pid/logs under `/tmp`)
-- Auto-add Tesla EVTV BMS integration (`auto_setup_bms`, UDP port, WebBox options)
+- **Fix:** Ingress crash `mkdir: can't create directory '/var/lib/nginx/tmp': Permission denied`
+  — HAOS AppArmor cannot write `/var/lib/nginx` or `/var/log/nginx`. nginx now uses
+  `/tmp/nginx` + `/dev/stderr` only
+- **Fix:** `SUPERVISOR_TOKEN` missing under s6-overlay — `run.sh` re-execs via
+  `with-contenv` so Core API calls work
+- **Feature:** auto-add **Tesla EVTV BMS** config entry (`auto_setup_bms`, UDP port
+  `6550`, optional `webbox_host` / `webbox_password`). Requests one Core restart
+  if the custom component is not loaded yet
+- **Feature:** surgically add `homeassistant.packages: !include_dir_named packages`
+  when missing so plant helpers load
 
 ## 2.2.11
 
