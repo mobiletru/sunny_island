@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 import tempfile
 import types
@@ -141,6 +142,61 @@ def test_render_config_requires_template():
         raise AssertionError("expected ValueError")
     except ValueError as exc:
         assert "PACK_PREFIX" in str(exc)
+
+
+def test_retired_app_slugs_and_not_self():
+    install = _load_script("install_integration.py")
+    assert install.addon_bare_slug("local_sunny_island_detail") == "sunny_island_detail"
+    assert install.addon_bare_slug("abcd1234_tesla_evtv_bms") == "tesla_evtv_bms"
+    assert install.addon_bare_slug("local_sunny_island") == "sunny_island"
+    assert install.is_self_app("local_sunny_island") is True
+    assert install.is_retired_app(slug="local_tesla_evtv_bms") is True
+    assert install.is_retired_app(slug="local_tesla_evtv_bms_monitor") is True
+    assert install.is_retired_app(slug="local_tesla_evtv_sunny_island") is True
+    assert install.is_retired_app(slug="ffffeeee_sunny_island_detail") is True
+    assert install.is_retired_app(slug="local_sunny_island") is False
+    assert install.is_retired_app(slug="local_webbox", name="Sunny Island WebBox") is True
+    assert install.is_retired_app(slug="local_webbox", name="Some other WebBox") is False
+    assert install.is_retired_panel("sunny-island") is True
+    assert install.is_retired_panel("local_sunny_island") is False
+
+
+def test_unify_hides_retired_ingress_panels():
+    install = _load_script("install_integration.py")
+    with tempfile.TemporaryDirectory() as td:
+        storage = Path(td) / ".storage"
+        storage.mkdir()
+        user = storage / "frontend.user_data_abc"
+        user.write_text(
+            json.dumps(
+                {
+                    "data": {
+                        "sidebar": {
+                            "hiddenPanels": [],
+                            "panelOrder": [
+                                "local_sunny_island",
+                                "local_sunny_island_detail",
+                                "sunny-island",
+                                "abcd1234_tesla_evtv_bms",
+                            ],
+                        }
+                    }
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        install.HA_CONFIG = Path(td)
+        msgs = install._unify_ha_sidebar_entry(extra_panels={"local_webbox"})
+        data = json.loads(user.read_text(encoding="utf-8"))
+        sidebar = data["data"]["sidebar"]
+        assert "local_sunny_island" in sidebar["panelOrder"]
+        assert "local_sunny_island_detail" not in sidebar["panelOrder"]
+        assert "abcd1234_tesla_evtv_bms" not in sidebar["panelOrder"]
+        assert "sunny-island" not in sidebar["panelOrder"]
+        assert "local_sunny_island_detail" in sidebar["hiddenPanels"]
+        assert "local_webbox" in sidebar["hiddenPanels"]
+        assert any("hid" in m or "sidebar" in m for m in msgs)
 
 
 def test_render_config_rewrites_prefixes():

@@ -1,5 +1,5 @@
 name: Sunny Island
-version: "2.2.11"
+version: "2.2.12"
 slug: sunny_island
 description: >-
   One plant app: Tesla EVTV BMS + Ingress UI (parameter buttons, wrench quirks,
@@ -33,6 +33,7 @@ options:
   auto_sync: true
   install_dashboard: true
   force_overwrite: false
+  retire_legacy_apps: true
   pack_prefix: battery_storage_tesla_pack
   envoy_prefix: sensor.envoy_122039004946
   ha_token: ""
@@ -41,6 +42,7 @@ schema:
   auto_sync: bool
   install_dashboard: bool
   force_overwrite: bool
+  retire_legacy_apps: bool
   pack_prefix: str
   envoy_prefix: str
   ha_token: password?

@@ -21,7 +21,7 @@ def test_repository_yaml_identifies_app_store_repo():
 def test_config_yaml_required_app_keys():
     text = _read("config.yaml")
     assert 'name: Sunny Island' in text
-    assert 'version: "2.2.11"' in text
+    assert 'version: "2.2.12"' in text
     assert "slug: sunny_island" in text
     assert "aarch64" in text and "amd64" in text
     assert "ingress: true" in text
@@ -46,7 +46,7 @@ def test_dockerfile_uses_official_multiarch_base_and_app_label():
     text = _read("Dockerfile")
     assert "ghcr.io/home-assistant/base:3.21" in text
     assert 'io.hass.type="app"' in text
-    assert "BUILD_VERSION=2.2.11" in text
+    assert "BUILD_VERSION=2.2.12" in text
 
 
 def test_presentation_and_security_files_exist():
@@ -67,6 +67,7 @@ def test_translations_cover_schema_keys():
         "auto_sync",
         "install_dashboard",
         "force_overwrite",
+        "retire_legacy_apps",
         "pack_prefix",
         "envoy_prefix",
         "ha_token",
