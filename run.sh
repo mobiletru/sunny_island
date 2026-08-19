@@ -28,5 +28,5 @@ mkdir -p /run/nginx /tmp/nginx
 echo "[sunny_island] nginx :8098 (Ingress plant UI)"
 # Finish Tesla EVTV BMS config-entry setup after nginx is listening so
 # a Core restart / slow API does not keep Ingress down.
-python3 /opt/sunny_island/install_integration.py --ensure-bms &
+python3 /opt/sunny_island/bms_setup.py --ensure-bms &
 exec nginx -g 'daemon off;'
