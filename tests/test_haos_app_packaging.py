@@ -21,7 +21,7 @@ def test_repository_yaml_identifies_app_store_repo():
 def test_config_yaml_required_app_keys():
     text = _read("config.yaml")
     assert 'name: Sunny Island' in text
-    assert 'version: "2.2.12"' in text
+    assert 'version: "2.2.13"' in text
     assert "auto_setup_bms: true" in text
     assert "bms_udp_port: 6550" in text
     assert "slug: sunny_island" in text
@@ -48,7 +48,8 @@ def test_dockerfile_uses_official_multiarch_base_and_app_label():
     text = _read("Dockerfile")
     assert "ghcr.io/home-assistant/base:3.21" in text
     assert 'io.hass.type="app"' in text
-    assert "BUILD_VERSION=2.2.12" in text
+    assert "BUILD_VERSION=2.2.13" in text
+    assert "COPY scripts/bms_setup.py" in text
 
 
 def test_presentation_and_security_files_exist():
@@ -88,22 +89,23 @@ def test_ingress_nginx_allows_supervisor_only():
     assert "listen 8098" in text
     assert "error_log /dev/stderr" in text
     assert "pid /tmp/nginx/nginx.pid" in text
+    assert "user root;" in text
     assert "/var/log/nginx" not in text
     assert "/var/lib/nginx" not in text
 
 
 def test_run_sh_avoids_readonly_nginx_dirs():
     text = _read("run.sh")
-    mkdir_lines = [
+    assert "/var/lib/nginx" not in "\n".join(
         line for line in text.splitlines() if line.strip().startswith("mkdir")
+    )
+    assert "nginx" not in [
+        tok for line in text.splitlines() if line.strip().startswith("exec") for tok in line.split()
     ]
-    assert mkdir_lines
-    joined = "\n".join(mkdir_lines)
-    assert "/var/lib/nginx" not in joined
-    assert "/var/log/nginx" not in joined
-    assert "mkdir -p /run/nginx /tmp/nginx" in text
     assert "with-contenv" in text
     assert "--ensure-bms" in text
+    assert "bms_setup.py" in text
+    assert "http_server.py" in text
 
 
 def test_translations_cover_bms_schema_keys():

@@ -53,7 +53,7 @@ This GitHub repo is an **app repository**. Add it once, then install **Sunny Isl
 3. Find **Sunny Island** → **Install** → **Start**
 4. Sidebar → **Sunny Island** (one Ingress entry — the plant app)
 5. The app adds **Tesla EVTV BMS** (UDP 6550, prefix `battery_storage_tesla_pack`) unless it already exists
-6. Optional: set **WebBox host** in app options, or Configure the BMS integration
+6. Set **WebBox host** (and password) in app options — applied to the BMS entry on start, including when the entry already exists
 7. Paste a long-lived HA token in the UI (or set `ha_token` in options)
 
 Local / development: clone this repo to `/addons/sunny_island`, then **Settings → Apps → Local → Sunny Island**. See [INSTALL.md](INSTALL.md).
@@ -72,8 +72,8 @@ If you previously installed **Sunny Island Detail**, **Tesla EVTV BMS**, **WebBo
 | `ha_token` | _(empty)_ | Optional long-lived token for the plant UI |
 | `auto_setup_bms` | `true` | Create Tesla EVTV BMS config entry if missing |
 | `bms_udp_port` | `6550` | LiteCAN UDP listen port |
-| `webbox_host` | _(empty)_ | Optional SMA WebBox IP on the BMS entry |
-| `webbox_password` | _(empty)_ | Optional WebBox RPC password |
+| `webbox_host` | _(empty)_ | SMA WebBox IP — applied to the BMS entry on start |
+| `webbox_password` | _(empty)_ | WebBox RPC password — applied with `webbox_host` |
 
 ## Development
 
