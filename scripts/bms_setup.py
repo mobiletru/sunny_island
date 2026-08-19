@@ -56,6 +56,65 @@ def _ha_api(
         return json.loads(raw.decode())
 
 
+def _load_bms_flag() -> dict:
+    if not BMS_FLAG.is_file():
+        return {}
+    try:
+        data = json.loads(BMS_FLAG.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _save_bms_flag(state: dict) -> None:
+    try:
+        BMS_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        BMS_FLAG.write_text(json.dumps(state) + "\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _webbox_from_opts(opts: dict) -> dict:
+    return {
+        "webbox_host": str(opts.get("webbox_host") or "").strip(),
+        "webbox_password": str(opts.get("webbox_password") or "").strip(),
+    }
+
+
+def _webbox_apply_needed(desired: dict, applied: dict) -> bool:
+    """True when addon WebBox options should be written onto the BMS entry.
+
+    Empty addon options never wipe a host the user set in the HA UI. A
+    previously applied pair is skipped so addon restart does not reload
+    the integration every time.
+    """
+    if not desired.get("webbox_host") and not desired.get("webbox_password"):
+        return False
+    return (
+        str(desired.get("webbox_host") or "") != str(applied.get("webbox_host") or "")
+        or str(desired.get("webbox_password") or "")
+        != str(applied.get("webbox_password") or "")
+    )
+
+
+def _schema_defaults(flow: dict) -> dict:
+    """Pull current-option defaults from an options-flow form schema."""
+    out: dict = {}
+    for field in flow.get("data_schema") or []:
+        if isinstance(field, dict) and "name" in field and "default" in field:
+            out[str(field["name"])] = field["default"]
+    return out
+
+
+def _remember_webbox_applied(opts: dict) -> None:
+    desired = _webbox_from_opts(opts)
+    if not desired.get("webbox_host") and not desired.get("webbox_password"):
+        return
+    state = _load_bms_flag()
+    state["webbox_applied"] = desired
+    _save_bms_flag(state)
+
+
 def _ensure_packages_include() -> str:
     """Add homeassistant.packages include when missing. Surgical; no other edits."""
     cfg = HA_CONFIG / "configuration.yaml"
@@ -186,6 +245,7 @@ def _create_bms_config_entry(opts: dict, token: str) -> str:
         return f"BMS flow submit failed: {exc}"
 
     if isinstance(result, dict) and result.get("type") == "create_entry":
+        _remember_webbox_applied(opts)
         return (
             f"created Tesla EVTV BMS entry "
             f"{result.get('title') or payload['name']} "
@@ -201,12 +261,7 @@ def _create_bms_config_entry(opts: dict, token: str) -> str:
 
 def _request_core_restart(token: str) -> str:
     now = time.time()
-    state: dict = {}
-    if BMS_FLAG.is_file():
-        try:
-            state = json.loads(BMS_FLAG.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            state = {}
+    state = _load_bms_flag()
     last = float(state.get("restart_requested_at") or 0)
     if last and (now - last) < 600:
         return "Core restart already requested; waiting for tesla_evtv_bms to load"
@@ -219,21 +274,110 @@ def _request_core_restart(token: str) -> str:
             timeout=3,
         )
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as exc:
+        # restart drops the proxy; treat timeout as "restart kicked off"
         if "timed out" in str(exc).lower() or "timeout" in str(exc).lower():
             pass
         else:
             return f"could not restart Core: {exc}"
     state["restart_requested_at"] = now
-    try:
-        BMS_FLAG.parent.mkdir(parents=True, exist_ok=True)
-        BMS_FLAG.write_text(json.dumps(state) + "\n", encoding="utf-8")
-    except OSError:
-        pass
+    _save_bms_flag(state)
     return "requested Core restart so tesla_evtv_bms can load"
 
 
+def _find_bms_entry(token: str) -> dict | None:
+    try:
+        entries = _ha_api("/config/config_entries/entry", token=token)
+    except (
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+        TimeoutError,
+        OSError,
+        json.JSONDecodeError,
+    ):
+        return None
+    if not isinstance(entries, list):
+        return None
+    for entry in entries:
+        if isinstance(entry, dict) and entry.get("domain") == "tesla_evtv_bms":
+            return entry
+    return None
+
+
+def _apply_webbox_via_options_flow(
+    token: str, entry_id: str, desired: dict
+) -> str:
+    """Write WebBox host/password onto an existing BMS entry (options flow)."""
+    try:
+        start = _ha_api(
+            "/config/config_entries/options/flow",
+            token=token,
+            method="POST",
+            body={"handler": entry_id},
+        )
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace") if hasattr(exc, "read") else str(exc)
+        return f"WebBox options flow start failed HTTP {exc.code}: {body[:200]}"
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+        return f"WebBox options flow start failed: {exc}"
+
+    if not isinstance(start, dict):
+        return f"WebBox options flow start: unexpected response {start!r}"
+    if start.get("type") == "abort":
+        return f"WebBox options flow abort: {start.get('reason') or 'unknown'}"
+    flow_id = start.get("flow_id")
+    if not flow_id:
+        return f"WebBox options flow missing flow_id: {start}"
+
+    payload = _schema_defaults(start)
+    if desired.get("webbox_host"):
+        payload["webbox_host"] = desired["webbox_host"]
+    if desired.get("webbox_password"):
+        payload["webbox_password"] = desired["webbox_password"]
+
+    try:
+        result = _ha_api(
+            f"/config/config_entries/options/flow/{flow_id}",
+            token=token,
+            method="POST",
+            body=payload,
+            timeout=60,
+        )
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace") if hasattr(exc, "read") else str(exc)
+        return f"WebBox options flow submit failed HTTP {exc.code}: {body[:200]}"
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+        return f"WebBox options flow submit failed: {exc}"
+
+    if isinstance(result, dict) and result.get("type") == "create_entry":
+        host = desired.get("webbox_host") or "(password only)"
+        return f"applied WebBox {host} to Tesla EVTV BMS"
+    return f"WebBox options flow unfinished: {result}"
+
+
+def _sync_webbox_on_existing_entry(opts: dict, token: str) -> str | None:
+    """Apply addon WebBox options to a BMS entry that was created without them."""
+    desired = _webbox_from_opts(opts)
+    applied = _load_bms_flag().get("webbox_applied")
+    if not isinstance(applied, dict):
+        applied = {}
+    if not _webbox_apply_needed(desired, applied):
+        return None
+    entry = _find_bms_entry(token)
+    if not entry or not entry.get("entry_id"):
+        return "WebBox sync skipped (no tesla_evtv_bms entry id)"
+    msg = _apply_webbox_via_options_flow(token, str(entry["entry_id"]), desired)
+    if msg.startswith("applied WebBox"):
+        _remember_webbox_applied(opts)
+    return msg
+
+
 def _ensure_bms_entry(opts: dict, *, wait: bool = False) -> list[str]:
-    """Create the Tesla EVTV BMS config entry when missing."""
+    """Create the Tesla EVTV BMS config entry when missing.
+
+    If the entry already exists, still push addon ``webbox_host`` /
+    ``webbox_password`` onto it — auto-setup used to create the entry once
+    with an empty host and never update it, which left WebBox sensors dead.
+    """
     if not bool(opts.get("auto_setup_bms", True)):
         return ["auto_setup_bms disabled"]
     token = _ha_token(opts)
@@ -245,7 +389,11 @@ def _ensure_bms_entry(opts: dict, *, wait: bool = False) -> list[str]:
     last = ""
     while True:
         if _bms_already_configured(token, prefix):
-            return ["Tesla EVTV BMS already configured"]
+            msgs = ["Tesla EVTV BMS already configured"]
+            sync = _sync_webbox_on_existing_entry(opts, token)
+            if sync:
+                msgs.append(sync)
+            return msgs
         if _bms_component_loaded(token):
             return [_create_bms_config_entry(opts, token)]
         last = _request_core_restart(token)
