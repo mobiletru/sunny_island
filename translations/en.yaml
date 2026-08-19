@@ -1,0 +1,30 @@
+configuration:
+  auto_sync:
+    name: Auto-sync BMS integration
+    description: >-
+      Copy custom_components/tesla_evtv_bms into Home Assistant /config on start
+      (honors force overwrite and version gating).
+  install_dashboard:
+    name: Install History dashboards
+    description: >-
+      Copy optional Lovelace YAML under /config/dashboards/sunny_island
+      (hidden from the sidebar; Ingress remains the only Sunny Island panel).
+  force_overwrite:
+    name: Force overwrite
+    description: Overwrite existing integration, dashboard, and app-managed YAML on sync.
+  pack_prefix:
+    name: Pack entity prefix
+    description: >-
+      Must match the Tesla EVTV BMS integration entity prefix
+      (default battery_storage_tesla_pack).
+  envoy_prefix:
+    name: Envoy entity prefix
+    description: Home Assistant entity prefix for Enphase Envoy sensors.
+  ha_token:
+    name: Home Assistant token
+    description: Optional long-lived access token injected into the plant UI on first load.
+  log_level:
+    name: Log level
+    description: App log verbosity.
+network:
+  8098/tcp: Plant UI (optional host mapping; prefer the Ingress sidebar)

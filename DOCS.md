@@ -8,7 +8,7 @@
 
 ## Integration sync
 
-On start, with `auto_sync: true` and `map: config:rw`:
+On start, with `auto_sync: true` and `map: homeassistant_config` at `/config`:
 
 - `/config/custom_components/tesla_evtv_bms` (honors `force_overwrite`)
 - optional `/config/dashboards/sunny_island` + `lovelace_include.yaml`

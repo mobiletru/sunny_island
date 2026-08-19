@@ -1,5 +1,5 @@
 name: Sunny Island
-version: "2.2.10"
+version: "2.2.11"
 slug: sunny_island
 description: >-
   One plant app: Tesla EVTV BMS + Ingress UI (parameter buttons, wrench quirks,
@@ -18,9 +18,12 @@ ingress: true
 ingress_port: 8098
 panel_icon: mdi:solar-power-variant
 panel_title: Sunny Island
+# Home Assistant config at /config (same path the installer already uses).
+# Do not also map app_config — that defaults to /config and would conflict.
 map:
-  - config:rw
-  - addon_config:rw
+  - type: homeassistant_config
+    read_only: false
+    path: /config
 watchdog: "http://[HOST]:[PORT:8098]/health"
 ports:
   8098/tcp: null
