@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.2.15
+
+- **Feature:** SI6048 WebBox **GetParameter / SetParameter** channels polled every
+  scan — charge voltages (`ChrgVtgFul` / `ChrgVtgFlo` / `ChrgVtgBoost` /
+  `ChrgVtgEqu`, `BatChrgVtgMan`), charge current/control/times, battery
+  type/capacity/temps, silent/sleep/self-consumption, grid V/Hz/current,
+  feed-in, inverter V/Hz, power limit, generator, cluster, AFRA
+- **Feature:** live charge setpoint (`BatChrgVtg`) next to SI battery voltage in
+  plant UI KPIs/tiles and Lovelace
+- **Feature:** plant UI **SI6048 parameters** group (writable numbers/enums +
+  readonly type / run mode / cluster)
+- Integration **1.9.14**
+
 ## 2.2.14
 
 - **Feature:** plant UI ring gauges for each Enphase microinverter
