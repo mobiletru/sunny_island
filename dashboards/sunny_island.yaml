@@ -597,6 +597,12 @@ views:
             min: 36
             max: 60
             needle: true
+          - type: gauge
+            entity: sensor.battery_storage_tesla_pack_webbox_charge_voltage
+            name: Charge set
+            min: 36
+            max: 60
+            needle: true
 
       - type: horizontal-stack
         cards:
@@ -722,6 +728,8 @@ views:
             name: Apparent power
           - entity: sensor.battery_storage_tesla_pack_webbox_battery_voltage
             name: Battery voltage
+          - entity: sensor.battery_storage_tesla_pack_webbox_charge_voltage
+            name: Charge setpoint
           - entity: sensor.battery_storage_tesla_pack_webbox_battery_soc
             name: Battery SoC
           - entity: sensor.battery_storage_tesla_pack_webbox_battery_temp
@@ -811,6 +819,12 @@ views:
               red: 36
               yellow: 40
               green: 42
+          - type: gauge
+            entity: sensor.battery_storage_tesla_pack_webbox_charge_voltage
+            name: Charge set
+            min: 36
+            max: 60
+            needle: true
 
       - type: horizontal-stack
         cards:
@@ -891,6 +905,8 @@ views:
             name: BatSoc
           - entity: sensor.battery_storage_tesla_pack_webbox_battery_voltage
             name: BatVtg
+          - entity: sensor.battery_storage_tesla_pack_webbox_charge_voltage
+            name: BatChrgVtg
           - entity: sensor.battery_storage_tesla_pack_webbox_battery_temp
             name: BatTmp
           - entity: sensor.battery_storage_tesla_pack_webbox_battery_current
@@ -931,6 +947,58 @@ views:
         title: SI parameters (Modbus / limits)
         show_header_toggle: false
         entities:
+          - entity: sensor.battery_storage_tesla_pack_webbox_charge_voltage
+            name: Charge setpoint
+          - entity: sensor.battery_storage_tesla_pack_webbox_charge_voltage_full
+            name: Full / absorption V/cell
+          - entity: sensor.battery_storage_tesla_pack_webbox_charge_voltage_float
+            name: Float V/cell
+          - entity: sensor.battery_storage_tesla_pack_webbox_charge_voltage_boost
+            name: Boost V/cell
+          - entity: sensor.battery_storage_tesla_pack_webbox_charge_voltage_equalize
+            name: Equalize V/cell
+          - entity: sensor.battery_storage_tesla_pack_webbox_charge_voltage_manual
+            name: Manual pack charge V
+          - entity: sensor.battery_storage_tesla_pack_webbox_charge_current_max
+            name: Charge current max
+          - entity: sensor.battery_storage_tesla_pack_webbox_inverter_charge_current_max
+            name: Inverter charge current max
+          - entity: sensor.battery_storage_tesla_pack_webbox_charge_control
+            name: Charge control
+          - entity: sensor.battery_storage_tesla_pack_webbox_auto_equalize
+            name: Auto equalize
+          - entity: sensor.battery_storage_tesla_pack_webbox_absorption_time_boost
+            name: Boost time
+          - entity: sensor.battery_storage_tesla_pack_webbox_absorption_time_full
+            name: Full time
+          - entity: sensor.battery_storage_tesla_pack_webbox_absorption_time_equalize
+            name: Equalize time
+          - entity: sensor.battery_storage_tesla_pack_webbox_battery_type
+            name: Battery type
+          - entity: sensor.battery_storage_tesla_pack_webbox_battery_nominal_v
+            name: Battery nominal V
+          - entity: sensor.battery_storage_tesla_pack_webbox_battery_capacity_ah
+            name: Battery capacity
+          - entity: sensor.battery_storage_tesla_pack_webbox_self_consumption_min
+            name: Self-consumption min SoC
+          - entity: sensor.battery_storage_tesla_pack_webbox_silent_enable
+            name: Silent charge
+          - entity: sensor.battery_storage_tesla_pack_webbox_sleep_enable
+            name: Sleep
+          - entity: sensor.battery_storage_tesla_pack_webbox_grid_mode
+            name: Grid mode
+          - entity: sensor.battery_storage_tesla_pack_webbox_grid_current_nom
+            name: Grid current nom
+          - entity: sensor.battery_storage_tesla_pack_webbox_grid_voltage_min
+            name: Grid V min
+          - entity: sensor.battery_storage_tesla_pack_webbox_grid_voltage_max
+            name: Grid V max
+          - entity: sensor.battery_storage_tesla_pack_webbox_feed_in_mode
+            name: Feed-in mode
+          - entity: sensor.battery_storage_tesla_pack_webbox_feed_in_soc_start
+            name: Feed-in SoC start
+          - entity: sensor.battery_storage_tesla_pack_webbox_feed_in_soc_stop
+            name: Feed-in SoC stop
           - entity: sensor.battery_storage_tesla_pack_webbox_discharge_limit
             name: Discharge limit
           - entity: sensor.battery_storage_tesla_pack_webbox_reverse_feed
@@ -961,6 +1029,8 @@ views:
         entities:
           - entity: sensor.battery_storage_tesla_pack_webbox_battery_voltage
             name: V
+          - entity: sensor.battery_storage_tesla_pack_webbox_charge_voltage
+            name: Charge set
           - entity: sensor.battery_storage_tesla_pack_webbox_battery_temp
             name: °C
           - entity: sensor.battery_storage_tesla_pack_webbox_grid_voltage
