@@ -21,7 +21,7 @@ def test_repository_yaml_identifies_app_store_repo():
 def test_config_yaml_required_app_keys():
     text = _read("config.yaml")
     assert 'name: Sunny Island' in text
-    assert 'version: "2.2.13"' in text
+    assert 'version: "2.2.15"' in text
     assert "auto_setup_bms: true" in text
     assert "bms_udp_port: 6550" in text
     assert "slug: sunny_island" in text
@@ -48,7 +48,7 @@ def test_dockerfile_uses_official_multiarch_base_and_app_label():
     text = _read("Dockerfile")
     assert "ghcr.io/home-assistant/base:3.21" in text
     assert 'io.hass.type="app"' in text
-    assert "BUILD_VERSION=2.2.13" in text
+    assert "BUILD_VERSION=2.2.15" in text
     assert "COPY scripts/bms_setup.py" in text
 
 
