@@ -31,8 +31,6 @@ profile sunny_island flags=(attach_disconnected,mediate_deleted) {
   /var/run/s6/** r,
   /proc/self/environ r,
   /tmp/** rwk,
-  /tmp/nginx rw,
-  /tmp/nginx/** rwk,
   /dev/stderr rw,
   /dev/stdout rw,
 
@@ -45,15 +43,9 @@ profile sunny_island flags=(attach_disconnected,mediate_deleted) {
   /opt/sunny_island/** r,
   /opt/sunny_island/**/*.py rix,
 
-  # Python installer / config renderer
+  # Python installer / config renderer / Ingress HTTP server
   /usr/lib/python3*/** r,
   /usr/lib/python3*/**/*.so* mr,
-
-  # nginx plant UI
-  /etc/nginx/** r,
-  /var/lib/nginx/** rwk,
-  /var/log/nginx/** rw,
-  /run/nginx/** rwk,
 
   # TLS trust + healthcheck curl
   /etc/ssl/** r,

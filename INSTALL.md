@@ -44,10 +44,22 @@ Merge under `lovelace.dashboards` manually, or open the YAML files as needed.
 
 ## After upgrading from separate apps
 
-1. Install/rebuild **Sunny Island** 2.1.1+
-2. Stop and **uninstall** the old **Tesla EVTV BMS** app (integration files stay in `/config`)
-3. Keep using the same EVTV BMS integration config in HA
-4. Enable `force_overwrite: true` once if you need to refresh the component from the image
+This repo **is** those old apps, combined. After **Sunny Island** is running,
+uninstall the leftovers so Settings → Apps shows one plant app:
+
+| Old app | Typical slug / repo |
+|---------|---------------------|
+| Tesla EVTV BMS | `tesla_evtv_bms` (`tesla_evtv_bms`, `tesla_evtv_bms_v3`) |
+| Tesla EVTV BMS Monitor | `tesla_evtv_bms_monitor` |
+| Tesla EVTV BMS + Sunny Island | `tesla_evtv_sunny_island` |
+| Sunny Island Detail | `sunny_island_detail` |
+| Sunny Island WebBox | `webbox` (`HA_SMA_WEBBOX`) |
+
+1. Install/start **Sunny Island** 2.2.16+ (it stops those apps and hides their sidebar panels when `retire_legacy_apps` is on)
+2. **Settings → Apps** → uninstall each leftover app above (integration files stay in `/config`)
+3. **Settings → Apps → ⋮ → Repositories** → remove `tesla_evtv_bms_v3`, `HA_SMA_WEBBOX`, and any local `/addons` copies of the old folders
+4. Keep the same Tesla EVTV BMS integration config in Devices & services
+5. Enable `force_overwrite: true` once if you need to refresh the component from this image
 
 ## Options
 

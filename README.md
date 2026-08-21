@@ -31,7 +31,8 @@ Install **only** this repository.
 - Installs packages / scripts / automations (Tessie charge, pack protection)
 - Adds `homeassistant.packages` include when missing
 - Copies optional History dashboard under `/config/dashboards/sunny_island`
-- Unifies sidebar: **Ingress only** (hides Lovelace `sunny-island` from the sidebar)
+- Unifies sidebar: **Ingress only** (hides Lovelace `sunny-island` and leftover plant-app panels)
+- Stops leftover plant apps when `retire_legacy_apps: true` (default)
 - Serves the **Sunny Island** Ingress plant UI
 
 ## Layout (UI)
@@ -58,7 +59,7 @@ This GitHub repo is an **app repository**. Add it once, then install **Sunny Isl
 
 Local / development: clone this repo to `/addons/sunny_island`, then **Settings → Apps → Local → Sunny Island**. See [INSTALL.md](INSTALL.md).
 
-If you previously installed **Sunny Island Detail**, **Tesla EVTV BMS**, **WebBox**, or the v3 monitor: stop and uninstall those apps. Keep this one.
+If you previously installed **Sunny Island Detail**, **Tesla EVTV BMS**, **WebBox**, or the v3 monitor: this app stops them and hides their sidebar panels. Uninstall those leftover apps in **Settings → Apps**. See [INSTALL.md](INSTALL.md).
 
 ## Options
 
@@ -67,6 +68,7 @@ If you previously installed **Sunny Island Detail**, **Tesla EVTV BMS**, **WebBo
 | `auto_sync` | `true` | Copy BMS integration into `/config` |
 | `install_dashboard` | `true` | Copy YAML dashboards under `/config/dashboards/sunny_island` |
 | `force_overwrite` | `false` | Overwrite existing integration/dashboard files on sync |
+| `retire_legacy_apps` | `true` | Stop leftover plant apps and hide their sidebar panels |
 | `pack_prefix` | `battery_storage_tesla_pack` | Must match integration **entity_prefix** |
 | `envoy_prefix` | `sensor.envoy_…` | Envoy entity prefix |
 | `ha_token` | _(empty)_ | Optional long-lived token for the plant UI |

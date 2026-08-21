@@ -4,7 +4,7 @@ ARG BUILD_FROM=ghcr.io/home-assistant/base:3.21
 FROM ${BUILD_FROM}
 
 ARG BUILD_ARCH=amd64
-ARG BUILD_VERSION=2.2.15
+ARG BUILD_VERSION=2.2.16
 
 LABEL \
     io.hass.name="Sunny Island" \
@@ -20,7 +20,7 @@ ENV LANG=C.UTF-8
 
 RUN set -eux; \
     for i in 1 2 3 4 5; do \
-      apk add --no-cache nginx python3 ca-certificates curl rsync && break; \
+      apk add --no-cache python3 ca-certificates curl rsync && break; \
       echo "apk retry $i"; sleep $((i * 3)); \
     done
 
@@ -31,7 +31,6 @@ COPY custom_components/tesla_evtv_bms /opt/sunny_island/custom_components/tesla_
 COPY dashboards /opt/sunny_island/dashboards
 COPY ha_config /opt/sunny_island/ha_config
 COPY rootfs/www /opt/sunny_island/www
-COPY rootfs/etc/nginx/nginx.conf /etc/nginx/nginx.conf
 COPY scripts/render_config.py /opt/sunny_island/render_config.py
 COPY scripts/install_integration.py /opt/sunny_island/install_integration.py
 COPY scripts/bms_setup.py /opt/sunny_island/bms_setup.py
@@ -43,8 +42,6 @@ ENV SI_APP_VERSION=${BUILD_VERSION}
 
 RUN sed -i 's/\r$//' /run.sh \
     && chmod a+x /run.sh \
-    && mkdir -p /run/nginx /tmp/nginx \
-    && chown -R nginx:nginx /run/nginx /tmp/nginx \
     && python3 -m py_compile /opt/sunny_island/render_config.py \
     && python3 -m py_compile /opt/sunny_island/install_integration.py \
     && python3 -m py_compile /opt/sunny_island/bms_setup.py \

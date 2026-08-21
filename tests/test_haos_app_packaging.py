@@ -21,9 +21,10 @@ def test_repository_yaml_identifies_app_store_repo():
 def test_config_yaml_required_app_keys():
     text = _read("config.yaml")
     assert 'name: Sunny Island' in text
-    assert 'version: "2.2.15"' in text
+    assert 'version: "2.2.16"' in text
     assert "auto_setup_bms: true" in text
     assert "bms_udp_port: 6550" in text
+    assert "retire_legacy_apps: true" in text
     assert "slug: sunny_island" in text
     assert "aarch64" in text and "amd64" in text
     assert "ingress: true" in text
@@ -48,8 +49,11 @@ def test_dockerfile_uses_official_multiarch_base_and_app_label():
     text = _read("Dockerfile")
     assert "ghcr.io/home-assistant/base:3.21" in text
     assert 'io.hass.type="app"' in text
-    assert "BUILD_VERSION=2.2.15" in text
+    assert "BUILD_VERSION=2.2.16" in text
     assert "COPY scripts/bms_setup.py" in text
+    assert "COPY scripts/http_server.py" in text
+    # nginx is unused: HAOS AppArmor denies /var/lib/nginx and setgid.
+    assert "nginx" not in text.lower()
 
 
 def test_presentation_and_security_files_exist():
@@ -60,7 +64,12 @@ def test_presentation_and_security_files_exist():
     assert icon.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
     assert logo.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
     assert (ROOT / "apparmor.txt").is_file()
-    assert "profile sunny_island" in _read("apparmor.txt")
+    apparmor = _read("apparmor.txt")
+    assert "profile sunny_island" in apparmor
+    assert "/usr/bin/with-contenv" in apparmor
+    assert "/tmp/**" in apparmor
+    assert "/var/lib/nginx" not in apparmor
+    assert "/var/log/nginx" not in apparmor
     assert (ROOT / "DOCS.md").is_file()
     assert (ROOT / "CHANGELOG.md").is_file()
 
@@ -70,6 +79,7 @@ def test_translations_cover_schema_keys():
         "auto_sync",
         "install_dashboard",
         "force_overwrite",
+        "retire_legacy_apps",
         "pack_prefix",
         "envoy_prefix",
         "ha_token",
@@ -81,28 +91,28 @@ def test_translations_cover_schema_keys():
     assert "8098/tcp:" in text
 
 
-def test_ingress_nginx_allows_supervisor_only():
-    text = _read("rootfs/etc/nginx/nginx.conf")
-    assert "allow 172.30.32.2" in text
-    assert "allow 127.0.0.1" in text
-    assert "deny all" in text
-    assert "listen 8098" in text
-    assert "error_log /dev/stderr" in text
-    assert "pid /tmp/nginx/nginx.pid" in text
-    assert "user root;" in text
-    assert "/var/log/nginx" not in text
+def test_ingress_python_server_allows_supervisor_only():
+    text = _read("scripts/http_server.py")
+    assert "172.30.32.0/23" in text
+    assert "172.30.32.2" in text
+    assert "peer_allowed" in text
+    assert "127.0.0.0/8" in text
+    assert "/health" in text
+    assert "8098" in text
+    assert "/js/config.js" in text
     assert "/var/lib/nginx" not in text
+    assert "/var/log/nginx" not in text
+    assert not (ROOT / "rootfs/etc/nginx/nginx.conf").exists()
 
 
 def test_run_sh_avoids_readonly_nginx_dirs():
     text = _read("run.sh")
-    assert "/var/lib/nginx" not in "\n".join(
-        line for line in text.splitlines() if line.strip().startswith("mkdir")
-    )
+    assert "/var/lib/nginx" not in text
     assert "nginx" not in [
         tok for line in text.splitlines() if line.strip().startswith("exec") for tok in line.split()
     ]
     assert "with-contenv" in text
+    assert "SUPERVISOR_TOKEN" in text
     assert "--ensure-bms" in text
     assert "bms_setup.py" in text
     assert "http_server.py" in text

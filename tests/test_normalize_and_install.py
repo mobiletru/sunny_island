@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sys
 import tempfile
@@ -158,8 +159,8 @@ def test_render_config_rewrites_prefixes():
 
 
 def test_bms_flow_payload_defaults():
-    install = _load_script("install_integration.py")
-    payload = install._bms_flow_payload({})
+    setup = _load_script("bms_setup.py")
+    payload = setup._bms_flow_payload({})
     assert payload["port"] == 6550
     assert payload["entity_prefix"] == "battery_storage_tesla_pack"
     assert payload["name"] == "Tesla Pack"
@@ -169,8 +170,8 @@ def test_bms_flow_payload_defaults():
 
 
 def test_bms_flow_payload_from_options():
-    install = _load_script("install_integration.py")
-    payload = install._bms_flow_payload(
+    setup = _load_script("bms_setup.py")
+    payload = setup._bms_flow_payload(
         {
             "pack_prefix": "battery_storage_tesla_pack",
             "bms_udp_port": "6551",
@@ -182,29 +183,135 @@ def test_bms_flow_payload_from_options():
 
 
 def test_ensure_packages_include_appends_when_missing():
-    install = _load_script("install_integration.py")
+    setup = _load_script("bms_setup.py")
     with tempfile.TemporaryDirectory() as td:
         ha = Path(td)
-        install.HA_CONFIG = ha
+        setup.HA_CONFIG = ha
         cfg = ha / "configuration.yaml"
         cfg.write_text("default_config:\n", encoding="utf-8")
-        msg = install._ensure_packages_include()
+        msg = setup._ensure_packages_include()
         text = cfg.read_text(encoding="utf-8")
         assert "include_dir_named packages" in text
         assert "added" in msg
-        again = install._ensure_packages_include()
+        again = setup._ensure_packages_include()
         assert again == "packages include already present"
 
 
 def test_ha_token_falls_back_to_options():
-    install = _load_script("install_integration.py")
+    setup = _load_script("bms_setup.py")
     saved = {
         k: os.environ.pop(k)
         for k in ("SUPERVISOR_TOKEN", "HASSIO_TOKEN")
         if k in os.environ
     }
     try:
-        assert install._ha_token() == ""
-        assert install._ha_token({"ha_token": "abc"}) == "abc"
+        assert setup._ha_token() == ""
+        assert setup._ha_token({"ha_token": "abc"}) == "abc"
     finally:
         os.environ.update(saved)
+
+
+def test_retired_app_slugs_and_not_self():
+    install = _load_script("install_integration.py")
+    assert install.addon_bare_slug("local_sunny_island_detail") == "sunny_island_detail"
+    assert install.addon_bare_slug("abcd1234_tesla_evtv_bms") == "tesla_evtv_bms"
+    assert install.addon_bare_slug("local_sunny_island") == "sunny_island"
+    assert install.is_self_app("local_sunny_island") is True
+    assert install.is_retired_app(slug="local_tesla_evtv_bms") is True
+    assert install.is_retired_app(slug="local_tesla_evtv_bms_monitor") is True
+    assert install.is_retired_app(slug="local_tesla_evtv_sunny_island") is True
+    assert install.is_retired_app(slug="ffffeeee_sunny_island_detail") is True
+    assert install.is_retired_app(slug="local_sunny_island") is False
+    assert install.is_retired_app(slug="local_webbox", name="Sunny Island WebBox") is True
+    assert install.is_retired_app(slug="local_webbox", name="Some other WebBox") is False
+    assert install.is_retired_panel("sunny-island") is True
+    assert install.is_retired_panel("local_sunny_island") is False
+
+
+def test_unify_hides_retired_ingress_panels():
+    install = _load_script("install_integration.py")
+    with tempfile.TemporaryDirectory() as td:
+        storage = Path(td) / ".storage"
+        storage.mkdir()
+        user = storage / "frontend.user_data_abc"
+        user.write_text(
+            json.dumps(
+                {
+                    "data": {
+                        "sidebar": {
+                            "hiddenPanels": [],
+                            "panelOrder": [
+                                "local_sunny_island",
+                                "local_sunny_island_detail",
+                                "sunny-island",
+                                "abcd1234_tesla_evtv_bms",
+                            ],
+                        }
+                    }
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        install.HA_CONFIG = Path(td)
+        msgs = install._unify_ha_sidebar_entry(extra_panels={"local_webbox"})
+        data = json.loads(user.read_text(encoding="utf-8"))
+        sidebar = data["data"]["sidebar"]
+        assert "local_sunny_island" in sidebar["panelOrder"]
+        assert "local_sunny_island_detail" not in sidebar["panelOrder"]
+        assert "abcd1234_tesla_evtv_bms" not in sidebar["panelOrder"]
+        assert "sunny-island" not in sidebar["panelOrder"]
+        assert "local_sunny_island_detail" in sidebar["hiddenPanels"]
+        assert "local_webbox" in sidebar["hiddenPanels"]
+        assert "local_tesla_evtv_bms_monitor" in sidebar["hiddenPanels"]
+        assert any("hid" in m or "sidebar" in m for m in msgs)
+
+
+def test_retire_legacy_apps_stops_and_hides_leftovers():
+    install = _load_script("install_integration.py")
+    calls: list[tuple[str, str, dict | None]] = []
+
+    def fake_supervisor(method: str, path: str, body: dict | None = None):
+        calls.append((method, path, body))
+        if method == "GET" and path == "/addons":
+            return {
+                "addons": [
+                    {
+                        "slug": "local_sunny_island",
+                        "name": "Sunny Island",
+                        "installed": True,
+                        "state": "started",
+                        "ingress_panel": True,
+                    },
+                    {
+                        "slug": "local_sunny_island_detail",
+                        "name": "Sunny Island Detail",
+                        "installed": True,
+                        "state": "started",
+                        "ingress_panel": True,
+                    },
+                    {
+                        "slug": "abcd1234_tesla_evtv_bms",
+                        "name": "Tesla EVTV BMS",
+                        "installed": True,
+                        "state": "stopped",
+                        "ingress_panel": False,
+                    },
+                ]
+            }
+        return {}
+
+    install._supervisor_request = fake_supervisor
+    extra, msgs = install._retire_legacy_apps()
+    assert "local_sunny_island_detail" in extra
+    assert "abcd1234_tesla_evtv_bms" in extra
+    assert "local_sunny_island" not in extra
+    assert any("stopped retired app Sunny Island Detail" in m for m in msgs)
+    assert any("retired app present (already stopped): Tesla EVTV BMS" in m for m in msgs)
+    assert ("POST", "/addons/local_sunny_island_detail/stop", None) in calls
+    assert (
+        "POST",
+        "/addons/local_sunny_island_detail/options",
+        {"ingress_panel": False},
+    ) in calls
+    assert not any(path.endswith("/local_sunny_island/stop") for _, path, _ in calls)
