@@ -93,8 +93,10 @@ def test_translations_cover_schema_keys():
 
 def test_ingress_python_server_allows_supervisor_only():
     text = _read("scripts/http_server.py")
+    assert "172.30.32.0/23" in text
     assert "172.30.32.2" in text
-    assert "127.0.0.1" in text
+    assert "peer_allowed" in text
+    assert "127.0.0.0/8" in text
     assert "/health" in text
     assert "8098" in text
     assert "/js/config.js" in text

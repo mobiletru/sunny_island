@@ -263,6 +263,7 @@ def test_unify_hides_retired_ingress_panels():
         assert "sunny-island" not in sidebar["panelOrder"]
         assert "local_sunny_island_detail" in sidebar["hiddenPanels"]
         assert "local_webbox" in sidebar["hiddenPanels"]
+        assert "local_tesla_evtv_bms_monitor" in sidebar["hiddenPanels"]
         assert any("hid" in m or "sidebar" in m for m in msgs)
 
 

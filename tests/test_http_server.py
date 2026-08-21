@@ -14,12 +14,26 @@ SCRIPTS = ROOT / "scripts"
 
 def _load_http_server():
     path = SCRIPTS / "http_server.py"
-    spec = importlib.util.spec_from_file_location("si_http_server", path)
+    key = "si_http_server"
+    if key in sys.modules:
+        del sys.modules[key]
+    spec = importlib.util.spec_from_file_location(key, path)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
-    sys.modules["si_http_server"] = mod
+    sys.modules[key] = mod
     spec.loader.exec_module(mod)
     return mod
+
+
+def test_peer_allowed_supervisor_and_ipv4_mapped():
+    http_server = _load_http_server()
+    assert http_server.peer_allowed("127.0.0.1") is True
+    assert http_server.peer_allowed("::1") is True
+    assert http_server.peer_allowed("172.30.32.2") is True
+    assert http_server.peer_allowed("172.30.33.1") is True
+    assert http_server.peer_allowed("::ffff:172.30.32.2") is True
+    assert http_server.peer_allowed("192.168.1.50") is False
+    assert http_server.peer_allowed("8.8.8.8") is False
 
 
 def test_health_and_config_from_localhost(tmp_path, monkeypatch):
@@ -41,12 +55,27 @@ def test_health_and_config_from_localhost(tmp_path, monkeypatch):
         conn.request("GET", "/health")
         resp = conn.getresponse()
         assert resp.status == 200
+        assert resp.getheader("Content-Type", "").startswith("text/plain")
         assert resp.read() == b"ok\n"
+
+        conn.request("HEAD", "/health")
+        resp = conn.getresponse()
+        assert resp.status == 200
+        resp.read()
 
         conn.request("GET", "/js/config.js")
         resp = conn.getresponse()
         assert resp.status == 200
         assert b"PACK_PREFIX" in resp.read()
+
+        # Core's 401 text/plain is Supervisor, not this app.
+        conn.request("GET", "/ingress/validate_session")
+        resp = conn.getresponse()
+        assert resp.status == 404
+        assert resp.getheader("Content-Type") == "application/json"
+        body = resp.read()
+        assert b"not supervisor" in body
+        assert resp.status != 401
     finally:
         httpd.shutdown()
         httpd.server_close()

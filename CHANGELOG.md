@@ -7,7 +7,14 @@
   stopped on start and their Ingress/Lovelace panels hidden so only this
   **Sunny Island** sidebar entry remains. Option `retire_legacy_apps` (default
   on); does **not** uninstall — remove those apps in Settings → Apps after
-  this one is running
+  this one is running. Stale leftover Ingress panels are the app-side cause of
+  Core `/ingress/validate_session` **401** (`text/plain; charset=utf-8`): that
+  call is Core → Supervisor, not this app; Supervisor `HTTPUnauthorized` is
+  plain text and Core fails to JSON-decode it
+- **Fix:** Ingress Python server allows the HAOS Supervisor/add-on Docker
+  networks (`172.30.32.0/23`, `172.30.33.0/24`) including IPv4-mapped IPv6, so
+  a valid session is not 403'd. `/ingress/*` is never answered as 401
+  text/plain (Supervisor owns that API)
 - **Fix:** Ingress no longer ships nginx. HAOS AppArmor cannot write
   `/var/lib/nginx` or `/var/log/nginx`, and nginx `setgid(101)` is denied.
   The plant UI is the Python server on `:8098` (`http_server.py`). Custom

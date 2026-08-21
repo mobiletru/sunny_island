@@ -439,6 +439,11 @@ def _unify_ha_sidebar_entry(
                 pid for pid in extra_panels if pid and not is_self_app(pid)
             )
             to_hide.update(LOVELACE_HISTORY_PANELS)
+            # Hide leftover plant Ingress slugs even if they are not in panelOrder
+            # (stale sidebar entries still trigger Core /ingress/validate_session).
+            for slug in RETIRED_APP_SLUGS:
+                to_hide.update({slug, f"local_{slug}", f"core_{slug}"})
+            to_hide.add("local_webbox")
             for pid in sorted(to_hide):
                 if pid not in hidden:
                     hidden.append(pid)

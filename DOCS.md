@@ -96,6 +96,13 @@ On start, leftover plant apps (EVTV BMS installer/monitor, Sunny Island Detail,
 WebBox) are stopped and their Ingress entries are hidden when
 `retire_legacy_apps` is enabled. Uninstall those apps in Settings → Apps.
 
+Core log `Client error on /ingress/validate_session request 401` with
+`text/plain; charset=utf-8` is Supervisor rejecting a stale Ingress **session**
+(leftover panel, `ingress_session` cookie, or `homeassistant.local` vs IP vs
+Cloudflare tunnel). This app does not serve that URL. Hide/uninstall leftover
+plant apps, then reload the sidebar panel. `396f0234_cloudflared` being stopped
+is a separate app and is not retired by Sunny Island.
+
 **History:** optional multi-view Lovelace (Overview · Cells · Energy · WebBox · Solar & car)
 at `/sunny-island/overview` — linked from the plant UI footer; hidden from sidebar so
 you do not get two “Sunny Island” apps.
