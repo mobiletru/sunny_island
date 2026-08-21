@@ -17,8 +17,14 @@ import asyncio
 import hashlib
 import json
 import logging
+import time
 from typing import Any
 from urllib.parse import urlencode
+
+try:
+    from aiohttp import ClientTimeout
+except ImportError:  # pragma: no cover
+    ClientTimeout = None  # type: ignore[misc, assignment]
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,6 +67,7 @@ RPC_PROCESS_MAP = {
     "InvOpStt": ("webbox_status", "text"),
     "Error": ("webbox_fault_text", "text"),
     "BatChrgOp": ("webbox_charge_mode", "text"),
+    "BatChrgVtg": ("webbox_charge_voltage", "float"),
 }
 
 # SI parameter: manual utility-grid start (GetParameter / SetParameter).
@@ -93,6 +100,482 @@ GRID_MAN_STR_LABELS: dict[str, str] = {
     "Auto": "Automatic",
     "Stop": "Off",
 }
+
+# SI6048UM GetParameter / SetParameter map (WebBox RPC).
+# Per-cell charge voltages are 2 V VRLA cells (×24 ≈ pack V).
+RPC_PARAM_SPECS: dict[str, dict[str, Any]] = {
+    "charge_voltage_full": {
+        "channel": "ChrgVtgFul",
+        "sensor": "webbox_charge_voltage_full",
+        "kind": "float",
+        "min": 1.5,
+        "max": 2.7,
+        "decimals": 2,
+    },
+    "charge_voltage_float": {
+        "channel": "ChrgVtgFlo",
+        "sensor": "webbox_charge_voltage_float",
+        "kind": "float",
+        "min": 1.4,
+        "max": 2.4,
+        "decimals": 2,
+    },
+    "charge_voltage_boost": {
+        "channel": "ChrgVtgBoost",
+        "sensor": "webbox_charge_voltage_boost",
+        "kind": "float",
+        "min": 1.5,
+        "max": 2.7,
+        "decimals": 2,
+    },
+    "charge_voltage_equalize": {
+        "channel": "ChrgVtgEqu",
+        "sensor": "webbox_charge_voltage_equalize",
+        "kind": "float",
+        "min": 1.5,
+        "max": 2.7,
+        "decimals": 2,
+    },
+    "charge_voltage_manual": {
+        "channel": "BatChrgVtgMan",
+        "sensor": "webbox_charge_voltage_manual",
+        "kind": "int",
+        "min": 41,
+        "max": 63,
+    },
+    "charge_current_max": {
+        "channel": "BatChrgCurMax",
+        "sensor": "webbox_charge_current_max",
+        "kind": "int",
+        "min": 10,
+        "max": 1200,
+    },
+    "inverter_charge_current_max": {
+        "channel": "InvChrgCurMax",
+        "sensor": "webbox_inverter_charge_current_max",
+        "kind": "int",
+        "min": 0,
+        "max": 50,
+    },
+    "charge_control": {
+        "channel": "ChrgCtlOp",
+        "sensor": "webbox_charge_control",
+        "kind": "enum",
+        "options": {"auto": "Auto", "manual": "Manual", "off": "Off"},
+    },
+    "auto_equalize": {
+        "channel": "AutoEquChrgEna",
+        "sensor": "webbox_auto_equalize",
+        "kind": "enum",
+        "options": {"enable": "Enable", "disable": "Disable"},
+    },
+    "absorption_time_boost": {
+        "channel": "AptTmBoost",
+        "sensor": "webbox_absorption_time_boost",
+        "kind": "int",
+        "min": 1,
+        "max": 600,
+    },
+    "absorption_time_equalize": {
+        "channel": "AptTmEqu",
+        "sensor": "webbox_absorption_time_equalize",
+        "kind": "int",
+        "min": 1,
+        "max": 48,
+    },
+    "absorption_time_full": {
+        "channel": "AptTmFul",
+        "sensor": "webbox_absorption_time_full",
+        "kind": "int",
+        "min": 1,
+        "max": 20,
+    },
+    "battery_type": {
+        "channel": "BatTyp",
+        "sensor": "webbox_battery_type",
+        "kind": "text",
+        "readonly": True,
+    },
+    "battery_nominal_v": {
+        "channel": "BatVtgNom",
+        "sensor": "webbox_battery_nominal_v",
+        "kind": "int",
+        "min": 42,
+        "max": 52,
+    },
+    "battery_capacity_ah": {
+        "channel": "BatCpyNom",
+        "sensor": "webbox_battery_capacity_ah",
+        "kind": "int",
+        "min": 100,
+        "max": 10000,
+    },
+    "self_consumption_min": {
+        "channel": "SlfCsmpSOCMin",
+        "sensor": "webbox_self_consumption_min",
+        "kind": "int",
+        "min": 5,
+        "max": 90,
+    },
+    "silent_enable": {
+        "channel": "SilentEna",
+        "sensor": "webbox_silent_enable",
+        "kind": "enum",
+        "options": {"enable": "Enable", "disable": "Disable"},
+    },
+    "sleep_enable": {
+        "channel": "SleepEna",
+        "sensor": "webbox_sleep_enable",
+        "kind": "enum",
+        "options": {"enable": "Enable", "disable": "Disable"},
+    },
+    "grid_current_nom": {
+        "channel": "GdCurNom",
+        "sensor": "webbox_grid_current_nom",
+        "kind": "int",
+        "min": 0,
+        "max": 1000,
+    },
+    "grid_voltage_min": {
+        "channel": "GdVtgMin",
+        "sensor": "webbox_grid_voltage_min",
+        "kind": "int",
+        "min": 80,
+        "max": 132,
+    },
+    "grid_voltage_max": {
+        "channel": "GdVtgMax",
+        "sensor": "webbox_grid_voltage_max",
+        "kind": "int",
+        "min": 105,
+        "max": 150,
+    },
+    "grid_mode": {
+        "channel": "GdMod",
+        "sensor": "webbox_grid_mode",
+        "kind": "text",
+        "readonly": True,
+    },
+    "feed_in_mode": {
+        "channel": "FedInMod",
+        "sensor": "webbox_feed_in_mode",
+        "kind": "text",
+        "readonly": True,
+    },
+    "feed_in_soc_start": {
+        "channel": "FedInSocStr",
+        "sensor": "webbox_feed_in_soc_start",
+        "kind": "int",
+        "min": 1,
+        "max": 90,
+    },
+    "feed_in_soc_stop": {
+        "channel": "FedInSocStp",
+        "sensor": "webbox_feed_in_soc_stop",
+        "kind": "int",
+        "min": 1,
+        "max": 90,
+    },
+    "feed_in_current": {
+        "channel": "FedInCurAt",
+        "sensor": "webbox_feed_in_current",
+        "kind": "int",
+        "min": -1000,
+        "max": 1000,
+    },
+    "cycle_time_equalize": {
+        "channel": "CycTmEqu",
+        "sensor": "webbox_cycle_time_equalize",
+        "kind": "int",
+        "min": 7,
+        "max": 365,
+    },
+    "cycle_time_full": {
+        "channel": "CycTmFul",
+        "sensor": "webbox_cycle_time_full",
+        "kind": "int",
+        "min": 1,
+        "max": 180,
+    },
+    "battery_temp_max": {
+        "channel": "BatTmpMax",
+        "sensor": "webbox_battery_temp_max",
+        "kind": "int",
+        "min": 0,
+        "max": 50,
+    },
+    "battery_fan_temp": {
+        "channel": "BatFanTmpStr",
+        "sensor": "webbox_battery_fan_temp",
+        "kind": "int",
+        "min": 20,
+        "max": 50,
+    },
+    "silent_time_float": {
+        "channel": "SilentTmFlo",
+        "sensor": "webbox_silent_time_float",
+        "kind": "int",
+        "min": 1,
+        "max": 48,
+    },
+    "silent_time_max": {
+        "channel": "SilentTmMax",
+        "sensor": "webbox_silent_time_max",
+        "kind": "int",
+        "min": 1,
+        "max": 168,
+    },
+    "self_consumption_inc": {
+        "channel": "SlfCsmpIncEna",
+        "sensor": "webbox_self_consumption_inc",
+        "kind": "enum",
+        "options": {"enable": "Enable", "disable": "Disable"},
+    },
+    "afra_enable": {
+        "channel": "AfraEna",
+        "sensor": "webbox_afra_enable",
+        "kind": "enum",
+        "options": {"enable": "Enable", "disable": "Disable"},
+    },
+    "run_mode": {
+        "channel": "RnMod",
+        "sensor": "webbox_run_mode",
+        "kind": "text",
+        "readonly": True,
+    },
+    "external_source": {
+        "channel": "ExtSrc",
+        "sensor": "webbox_external_source",
+        "kind": "text",
+        "readonly": True,
+    },
+    "cluster_config": {
+        "channel": "ClstCfg",
+        "sensor": "webbox_cluster_config",
+        "kind": "text",
+        "readonly": True,
+    },
+    "inverter_voltage_nom": {
+        "channel": "InvVtgNom",
+        "sensor": "webbox_inverter_voltage_nom",
+        "kind": "int",
+        "min": 80,
+        "max": 150,
+    },
+    "inverter_frequency_nom": {
+        "channel": "InvFrqNom",
+        "sensor": "webbox_inverter_frequency_nom",
+        "kind": "float",
+        "min": 50,
+        "max": 70,
+        "decimals": 1,
+    },
+    "power_limit": {
+        "channel": "Plimit",
+        "sensor": "webbox_power_limit",
+        "kind": "float",
+        "min": 0,
+        "max": 100,
+        "decimals": 1,
+    },
+    "grid_frequency_nom": {
+        "channel": "GdFrqNom",
+        "sensor": "webbox_grid_frequency_nom",
+        "kind": "float",
+        "min": 50,
+        "max": 70,
+        "decimals": 1,
+    },
+    "grid_frequency_min": {
+        "channel": "GdFrqMin",
+        "sensor": "webbox_grid_frequency_min",
+        "kind": "float",
+        "min": 50,
+        "max": 62,
+        "decimals": 1,
+    },
+    "grid_frequency_max": {
+        "channel": "GdFrqMax",
+        "sensor": "webbox_grid_frequency_max",
+        "kind": "float",
+        "min": 57.3,
+        "max": 70,
+        "decimals": 1,
+    },
+    "grid_power_enable": {
+        "channel": "GdPwrEna",
+        "sensor": "webbox_grid_power_enable",
+        "kind": "enum",
+        "options": {"enable": "Enable", "disable": "Disable"},
+    },
+    "grid_soc_enable": {
+        "channel": "GdSocEna",
+        "sensor": "webbox_grid_soc_enable",
+        "kind": "enum",
+        "options": {"enable": "Enable", "disable": "Disable"},
+    },
+    "generator_auto": {
+        "channel": "GnAutoEna",
+        "sensor": "webbox_generator_auto",
+        "kind": "enum",
+        "options": {"on": "On", "off": "Off", "enable": "On", "disable": "Off"},
+    },
+    "generator_current_nom": {
+        "channel": "GnCurNom",
+        "sensor": "webbox_generator_current_nom",
+        "kind": "int",
+        "min": 0,
+        "max": 1000,
+    },
+    "generator_power_start": {
+        "channel": "GnPwrStr",
+        "sensor": "webbox_generator_power_start",
+        "kind": "float",
+        "min": 5,
+        "max": 20,
+        "decimals": 1,
+    },
+    "generator_power_stop": {
+        "channel": "GnPwrStp",
+        "sensor": "webbox_generator_power_stop",
+        "kind": "float",
+        "min": 5,
+        "max": 20,
+        "decimals": 1,
+    },
+    "generator_voltage_min": {
+        "channel": "GnVtgMin",
+        "sensor": "webbox_generator_voltage_min",
+        "kind": "int",
+        "min": 80,
+        "max": 132,
+    },
+    "generator_voltage_max": {
+        "channel": "GnVtgMax",
+        "sensor": "webbox_generator_voltage_max",
+        "kind": "int",
+        "min": 105,
+        "max": 150,
+    },
+}
+
+RPC_CHARGE_VOLTAGE_MAP: dict[str, str] = {
+    spec["channel"]: spec["sensor"]
+    for key, spec in RPC_PARAM_SPECS.items()
+    if key.startswith("charge_voltage_")
+}
+CHARGE_VOLTAGE_WRITE = {
+    key: spec
+    for key, spec in RPC_PARAM_SPECS.items()
+    if key.startswith("charge_voltage_")
+}
+RPC_CHANNEL_TO_SENSOR: dict[str, str] = {
+    spec["channel"]: spec["sensor"] for spec in RPC_PARAM_SPECS.values()
+}
+
+RPC_PARAM_ALIASES: dict[str, str] = {
+    "full": "charge_voltage_full",
+    "absorption": "charge_voltage_full",
+    "abs": "charge_voltage_full",
+    "chrgvtgful": "charge_voltage_full",
+    "float": "charge_voltage_float",
+    "flo": "charge_voltage_float",
+    "chrgvtgflo": "charge_voltage_float",
+    "boost": "charge_voltage_boost",
+    "chrgvtgboost": "charge_voltage_boost",
+    "equalize": "charge_voltage_equalize",
+    "equalisation": "charge_voltage_equalize",
+    "equ": "charge_voltage_equalize",
+    "chrgvtgequ": "charge_voltage_equalize",
+    "manual": "charge_voltage_manual",
+    "batchrgvtgman": "charge_voltage_manual",
+    "pack": "charge_voltage_manual",
+    "batchrgcurmax": "charge_current_max",
+    "invchrgcurmax": "inverter_charge_current_max",
+    "chrgctlop": "charge_control",
+    "autoequchrgena": "auto_equalize",
+    "apttmboost": "absorption_time_boost",
+    "apttmequ": "absorption_time_equalize",
+    "apttmful": "absorption_time_full",
+    "battyp": "battery_type",
+    "batvtgnom": "battery_nominal_v",
+    "batcpynom": "battery_capacity_ah",
+    "slfcsmpsocmin": "self_consumption_min",
+    "silentena": "silent_enable",
+    "sleepena": "sleep_enable",
+    "gdcurnom": "grid_current_nom",
+    "gdvtgmin": "grid_voltage_min",
+    "gdvtgmax": "grid_voltage_max",
+    "gdmod": "grid_mode",
+    "fedinmod": "feed_in_mode",
+    "fedinsocstr": "feed_in_soc_start",
+    "fedinsocstp": "feed_in_soc_stop",
+    "fedincurat": "feed_in_current",
+    "cyctmequ": "cycle_time_equalize",
+    "cyctmful": "cycle_time_full",
+    "battmpmax": "battery_temp_max",
+    "batfantmpstr": "battery_fan_temp",
+    "silenttmflo": "silent_time_float",
+    "silenttmmax": "silent_time_max",
+    "slfcsmpsincena": "self_consumption_inc",
+    "slfcsmpincena": "self_consumption_inc",
+    "afraena": "afra_enable",
+    "rnmod": "run_mode",
+    "extsrc": "external_source",
+    "clstcfg": "cluster_config",
+    "invvtgnom": "inverter_voltage_nom",
+    "invfrqnom": "inverter_frequency_nom",
+    "plimit": "power_limit",
+    "gdfrqnom": "grid_frequency_nom",
+    "gdfrqmin": "grid_frequency_min",
+    "gdfrqmax": "grid_frequency_max",
+    "gdpwrena": "grid_power_enable",
+    "gdsocena": "grid_soc_enable",
+    "gnautoena": "generator_auto",
+    "gncurnom": "generator_current_nom",
+    "gnpwrstr": "generator_power_start",
+    "gnpwrstp": "generator_power_stop",
+    "gnvtgmin": "generator_voltage_min",
+    "gnvtgmax": "generator_voltage_max",
+}
+
+PARAMETER_READ_CHANNELS: list[str] = [
+    GRID_MAN_STR_CHANNEL,
+    *RPC_CHANNEL_TO_SENSOR.keys(),
+]
+
+
+def resolve_rpc_param(param: str) -> str:
+    key = (param or "").strip().lower().replace(" ", "_").replace("-", "_")
+    key = RPC_PARAM_ALIASES.get(key, key)
+    if key not in RPC_PARAM_SPECS:
+        raise ValueError(
+            f"Unknown WebBox parameter {param!r}; "
+            f"use one of {sorted(RPC_PARAM_SPECS)}"
+        )
+    return key
+
+
+def resolve_charge_voltage_param(param: str) -> str:
+    key = resolve_rpc_param(param)
+    if key not in CHARGE_VOLTAGE_WRITE:
+        raise ValueError(
+            f"Unknown charge voltage parameter {param!r}; "
+            f"use one of {sorted(CHARGE_VOLTAGE_WRITE)}"
+        )
+    return key
+
+
+def _parse_param_number(value: Any) -> float | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw or raw in ("---", "-", "-----"):
+        return None
+    try:
+        return float(raw.split()[0].replace(",", "."))
+    except ValueError:
+        return None
 
 
 def webbox_password_hash(password: str) -> str:
@@ -300,6 +783,24 @@ def parse_rpc_parameters(body: str) -> dict[str, Any]:
                 continue
             if meta == GRID_MAN_STR_CHANNEL:
                 apply_grid_man_str(out, str(value))
+                continue
+            sensor_key = RPC_CHANNEL_TO_SENSOR.get(meta)
+            if not sensor_key:
+                continue
+            spec = next(
+                (s for s in RPC_PARAM_SPECS.values() if s["sensor"] == sensor_key),
+                {"kind": "float"},
+            )
+            kind = spec.get("kind") or "float"
+            if kind in ("float", "int"):
+                num = _parse_param_number(value)
+                if num is None:
+                    continue
+                out[sensor_key] = int(round(num)) if kind == "int" else num
+            else:
+                raw = str(value).strip()
+                if raw and raw not in ("---", "-", "-----"):
+                    out[sensor_key] = raw
     return out
 
 
@@ -312,6 +813,62 @@ def mode_to_grid_man_str(mode: str) -> str:
             f"use off | manual_on | automatic (or Start | Auto | Stop)"
         )
     return man
+
+
+def _rpc_error_tag(err: BaseException) -> str:
+    """aiohttp Connect errors are often empty (`error:`); keep a usable tag."""
+    msg = str(err).strip()
+    name = type(err).__name__
+    if not msg:
+        return f"error:{name}"
+    if msg.startswith(name):
+        return f"error:{msg}"
+    return f"error:{name}: {msg}"
+
+
+def _is_connect_failure(status: str) -> bool:
+    s = (status or "").lower()
+    return any(
+        t in s
+        for t in (
+            "connect call failed",
+            "cannot connect",
+            "clientconnectorerror",
+            "connection refused",
+            "network is unreachable",
+            "no route to host",
+            "name or service not known",
+        )
+    )
+
+
+def _rpc_timeout(total: float):
+    """Fail fast on a down WebBox so ajax/Modbus can still run."""
+    if ClientTimeout is None:
+        return total
+    connect = min(3.0, max(1.0, float(total) / 4.0))
+    try:
+        return ClientTimeout(total=float(total), sock_connect=connect, connect=connect)
+    except TypeError:
+        return float(total)
+
+
+# host -> circuit (skip RPC after connect failures; rate-limit warnings)
+_RPC_GATE: dict[str, dict[str, Any]] = {}
+_WARN_INTERVAL_S = 300.0
+
+
+def _rpc_gate(host: str) -> dict[str, Any]:
+    gate = _RPC_GATE.get(host)
+    if gate is None:
+        gate = {
+            "until": 0.0,
+            "consecutive": 0,
+            "last_warn": 0.0,
+            "last_logged": "",
+        }
+        _RPC_GATE[host] = gate
+    return gate
 
 
 async def _rpc_call(
@@ -328,6 +885,7 @@ async def _rpc_call(
 
     WebBox firmware is fragile under keep-alive + concurrent polls (connection
     reset / disconnect). Force Connection: close and retry transient failures.
+    Hard connect failures (host down) are not retried — they just delay ajax.
     """
     payload = build_rpc_request(proc, password=password, params=params)
     # Critical: WebBox expects form field name "RPC", not raw JSON body.
@@ -337,13 +895,14 @@ async def _rpc_call(
         "Connection": "close",
     }
     last_status = "error:unknown"
+    aio_timeout = _rpc_timeout(timeout)
     for attempt in range(max(1, retries)):
         try:
             async with session.post(
                 f"http://{host}/rpc",
                 data=form,
                 headers=headers,
-                timeout=timeout,
+                timeout=aio_timeout,
             ) as resp:
                 body = await resp.text()
                 if resp.status >= 400:
@@ -354,17 +913,20 @@ async def _rpc_call(
                         continue
                     return None, last_status
         except Exception as err:  # noqa: BLE001
-            last_status = f"error:{err}"
-            err_l = str(err).lower()
+            last_status = _rpc_error_tag(err)
+            err_l = last_status.lower()
+            # Host unreachable — retrying 3×12s piles polls and wedges the box.
+            if _is_connect_failure(last_status):
+                return None, last_status
             transient = any(
                 t in err_l
                 for t in (
                     "reset",
                     "disconnect",
                     "timeout",
-                    "connect",
                     "broken pipe",
                     "eof",
+                    "server disconnected",
                 )
             )
             if transient and attempt + 1 < retries:
@@ -381,15 +943,52 @@ async def _rpc_call(
     return None, last_status
 
 
+def _log_rpc_unusable(host: str, status: str, *, ajax_ok: bool) -> None:
+    """Warn once, then at most every 5 minutes unless the status string changes."""
+    gate = _rpc_gate(host)
+    now = time.monotonic()
+    if (
+        gate["consecutive"] <= 1
+        or status != gate.get("last_logged")
+        or (now - float(gate["last_warn"])) >= _WARN_INTERVAL_S
+    ):
+        gate["last_warn"] = now
+        gate["last_logged"] = status
+        level = logging.INFO if ajax_ok else logging.WARNING
+        _LOGGER.log(
+            level,
+            "[tesla_evtv_bms] WebBox RPC not usable on %s (%s); using home.ajax. "
+            "Ensure RPC is enabled and password is correct (plain text; MD5 is applied automatically).",
+            host,
+            status,
+        )
+    else:
+        _LOGGER.debug(
+            "[tesla_evtv_bms] WebBox RPC still unusable on %s (%s) x%s",
+            host,
+            status,
+            gate["consecutive"],
+        )
+
+
 async def async_poll_webbox(session, host: str, password: str | None) -> dict:
     """Fetch WebBox values via RPC (preferred) with home.ajax fallback."""
     values: dict[str, Any] = {}
     rpc_ok = False
+    host = (host or "").strip()
+    gate = _rpc_gate(host)
+    now = time.monotonic()
+    skip_rpc = bool(host) and now < float(gate.get("until") or 0)
 
-    # 1) Plant overview via RPC
-    body, status = await _rpc_call(
-        session, host, "GetPlantOverview", password=password
-    )
+    # 1) Plant overview via RPC (skipped while the connect circuit is open)
+    if skip_rpc:
+        status = str(gate.get("last_logged") or "backoff")
+        values["webbox_rpc_status"] = status
+        body = None
+    else:
+        body, status = await _rpc_call(
+            session, host, "GetPlantOverview", password=password
+        )
     if body:
         overview = parse_rpc_plant_overview(body)
         if overview:
@@ -398,6 +997,11 @@ async def async_poll_webbox(session, host: str, password: str | None) -> dict:
             values["webbox_rpc_status"] = "ok"
     else:
         values["webbox_rpc_status"] = status
+        if not skip_rpc:
+            gate["consecutive"] = int(gate.get("consecutive") or 0) + 1
+            if _is_connect_failure(status):
+                delay = min(300.0, 30.0 * (2 ** min(int(gate["consecutive"]) - 1, 3)))
+                gate["until"] = time.monotonic() + delay
 
     # 2) SI process data + grid-start parameter via RPC
     if rpc_ok or status == "ok":
@@ -447,7 +1051,7 @@ async def async_poll_webbox(session, host: str, password: str | None) -> dict:
                     "devices": [
                         {
                             "key": device_key,
-                            "channels": [GRID_MAN_STR_CHANNEL],
+                            "channels": list(PARAMETER_READ_CHANNELS),
                         }
                     ]
                 },
@@ -475,17 +1079,24 @@ async def async_poll_webbox(session, host: str, password: str | None) -> dict:
             raise
 
     if rpc_ok:
+        if gate.get("consecutive"):
+            _LOGGER.info(
+                "[tesla_evtv_bms] WebBox RPC recovered on %s after %s failures",
+                host,
+                gate["consecutive"],
+            )
+        gate["consecutive"] = 0
+        gate["until"] = 0.0
         _LOGGER.debug(
             "[tesla_evtv_bms] WebBox RPC ok host=%s keys=%s",
             host,
             sorted(values.keys())[:12],
         )
     else:
-        _LOGGER.warning(
-            "[tesla_evtv_bms] WebBox RPC not usable on %s (%s); using home.ajax. "
-            "Ensure RPC is enabled and password is correct (plain text; MD5 is applied automatically).",
+        _log_rpc_unusable(
             host,
-            values.get("webbox_rpc_status"),
+            str(values.get("webbox_rpc_status") or status or "error"),
+            ajax_ok="webbox_power" in values,
         )
 
     return values
@@ -588,6 +1199,7 @@ RPC_PARAMETER_KEYS = frozenset(
         "webbox_grid_control_option",
         "webbox_grid_control",
         "webbox_grid_control_code",
+        *RPC_CHANNEL_TO_SENSOR.values(),
     }
 )
 
@@ -598,8 +1210,11 @@ def merge_modbus_without_clobbering_rpc_params(
     """Merge Modbus onto HTTP/RPC; keep RPC parameter-sourced grid control."""
     out = dict(http_values)
     protect = bool(out.get("webbox_grid_man_str") or out.get("webbox_grid_control_option"))
+    rpc_sensors = set(RPC_CHANNEL_TO_SENSOR.values())
     for key, val in mb_values.items():
         if protect and key in RPC_PARAMETER_KEYS:
+            continue
+        if key in rpc_sensors and key in out:
             continue
         out[key] = val
     return out
@@ -610,6 +1225,157 @@ def apply_grid_control_optimistic(values: dict[str, Any], mode: str) -> str:
     man = mode_to_grid_man_str(mode)
     apply_grid_man_str(values, man)
     return GRID_MAN_STR_TO_OPTION[man]
+
+
+def apply_rpc_param_optimistic(values: dict[str, Any], param: str, stored: Any) -> None:
+    spec = RPC_PARAM_SPECS[resolve_rpc_param(param)]
+    values[spec["sensor"]] = stored
+
+
+def apply_charge_voltage_optimistic(
+    values: dict[str, Any], param: str, number: float
+) -> None:
+    apply_rpc_param_optimistic(values, param, number)
+
+
+def _render_rpc_value(spec: dict[str, Any], value: Any) -> tuple[str, Any]:
+    """Return (string sent to WebBox, value stored on sensors)."""
+    kind = spec.get("kind") or "float"
+    if kind == "enum":
+        options: dict[str, str] = spec.get("options") or {}
+        raw = str(value).strip()
+        key = raw.lower().replace(" ", "_").replace("-", "_")
+        if key in options:
+            rendered = options[key]
+        elif raw in options.values():
+            rendered = raw
+        else:
+            raise ValueError(
+                f"Invalid value {value!r}; options={sorted(options)}"
+            )
+        return rendered, rendered
+    if kind == "text":
+        raw = str(value).strip()
+        if not raw:
+            raise ValueError("empty value")
+        return raw, raw
+    number = _parse_param_number(value)
+    if number is None:
+        raise ValueError(f"Invalid number {value!r}")
+    lo = spec.get("min")
+    hi = spec.get("max")
+    if lo is not None and number < float(lo):
+        raise ValueError(f"value must be ≥ {lo}")
+    if hi is not None and number > float(hi):
+        raise ValueError(f"value must be ≤ {hi}")
+    if kind == "int":
+        stored = int(round(number))
+        return str(stored), stored
+    decimals = int(spec.get("decimals") or 2)
+    stored = round(number, decimals)
+    return f"{stored:.{decimals}f}", stored
+
+
+async def async_write_rpc_parameter(
+    session,
+    host: str,
+    param: str,
+    value: Any,
+    *,
+    password: str | None = None,
+    device_key: str | None = None,
+) -> tuple[bool, Any]:
+    """Write a WebBox GetParameter/SetParameter channel. Returns (ok, stored)."""
+    param_key = resolve_rpc_param(param)
+    spec = RPC_PARAM_SPECS[param_key]
+    if spec.get("readonly"):
+        raise ValueError(f"{param_key} is read-only")
+    rendered, stored = _render_rpc_value(spec, value)
+
+    host = (host or "").strip()
+    if not host:
+        raise ValueError("WebBox host is empty")
+
+    key = (device_key or "").strip() or None
+    if not key:
+        dev_body, status = await _rpc_call(
+            session, host, "GetDevices", password=password
+        )
+        devices = parse_rpc_devices(dev_body or "")
+        si_keys = [k for k in devices if k.upper().startswith("SI")]
+        targets = si_keys or devices
+        if not targets:
+            _LOGGER.warning(
+                "WebBox parameter RPC: no devices on %s (%s)", host, status
+            )
+            return False, stored
+        key = targets[0]
+
+    channel = spec["channel"]
+    body, status = await _rpc_call(
+        session,
+        host,
+        "SetParameter",
+        password=password,
+        params={
+            "devices": [
+                {
+                    "key": key,
+                    "channels": [{"meta": channel, "value": rendered}],
+                }
+            ]
+        },
+        timeout=20,
+    )
+    if not body:
+        _LOGGER.warning(
+            "WebBox parameter RPC write failed %s=%s host=%s status=%s",
+            channel,
+            rendered,
+            host,
+            status,
+        )
+        return False, stored
+
+    envelope = _parse_rpc_envelope(body)
+    if not envelope or "error" in envelope:
+        err = (envelope or {}).get("error") if isinstance(envelope, dict) else None
+        _LOGGER.warning(
+            "WebBox parameter RPC error %s=%s host=%s err=%s",
+            channel,
+            rendered,
+            host,
+            err,
+        )
+        return False, stored
+
+    _LOGGER.info(
+        "WebBox parameter RPC → %s=%s on %s device=%s",
+        channel,
+        rendered,
+        host,
+        key,
+    )
+    return True, stored
+
+
+async def async_write_charge_voltage_rpc(
+    session,
+    host: str,
+    param: str,
+    value: Any,
+    *,
+    password: str | None = None,
+    device_key: str | None = None,
+) -> tuple[bool, Any]:
+    return await async_write_rpc_parameter(
+        session,
+        host,
+        param,
+        value,
+        password=password,
+        device_key=device_key,
+    )
 
 
 async def async_set_grid_control(
