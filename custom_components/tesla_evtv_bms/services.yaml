@@ -64,10 +64,9 @@ set_grid_control:
 set_si_parameter:
   name: Set Sunny Island parameter
   description: >
-    Write a Sunny Island / WebBox Modbus parameter (unit 3). Used by the plant
-    app parameter buttons. Parameters: grid_control, reverse_feed,
-    power_setpoint_mode, discharge_limit, feed_soc_upper, feed_soc_lower,
-    power_setpoint_timeout. grid_control also tries RPC SetParameter GdManStr.
+    Write a Sunny Island / WebBox parameter. Used by the plant app parameter
+    buttons. Charge voltages use WebBox RPC SetParameter (SI6048UM). Other
+    parameters use Modbus unit 3. grid_control tries RPC GdManStr first.
   fields:
     parameter:
       name: Parameter
@@ -84,11 +83,34 @@ set_si_parameter:
             - feed_soc_upper
             - feed_soc_lower
             - power_setpoint_timeout
+            - charge_voltage_full
+            - charge_voltage_float
+            - charge_voltage_boost
+            - charge_voltage_equalize
+            - charge_voltage_manual
+            - charge_current_max
+            - inverter_charge_current_max
+            - charge_control
+            - auto_equalize
+            - absorption_time_boost
+            - absorption_time_equalize
+            - absorption_time_full
+            - battery_nominal_v
+            - battery_capacity_ah
+            - self_consumption_min
+            - silent_enable
+            - sleep_enable
+            - grid_current_nom
+            - grid_voltage_min
+            - grid_voltage_max
+            - feed_in_soc_start
+            - feed_in_soc_stop
     value:
       name: Value
       description: >
-        Enum option (yes/no, off/manual_w/manual_pct/external, manual_on/automatic)
-        or integer (limits 0–100, timeout seconds)
+        Enum option (yes/no, off/manual_w/manual_pct/external, manual_on/automatic),
+        integer (limits 0–100, timeout seconds), or charge voltage (V/cell for
+        full/float/boost/equalize, pack V for manual)
       required: true
       example: "yes"
       selector:
