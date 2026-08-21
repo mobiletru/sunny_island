@@ -768,6 +768,11 @@
     // KPIs
     $('#kpi-volts').textContent = isNaN(volts) ? '—' : volts.toFixed(2) + ' V';
     $('#kpi-soc').textContent = isNaN(soc) ? '—' : soc.toFixed(1) + '%';
+    const chargeSet = num('webboxChargeV');
+    const kpiCharge = $('#kpi-charge-set');
+    if (kpiCharge) {
+      kpiCharge.textContent = isNaN(chargeSet) ? '—' : chargeSet.toFixed(1) + ' V';
+    }
     const kpiAmps = $('#kpi-amps');
     kpiAmps.textContent = isNaN(current)
       ? '—'
