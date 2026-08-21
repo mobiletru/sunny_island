@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.2.16
+
+- **Fix:** leftover plant apps (`tesla_evtv_bms`, `tesla_evtv_bms_monitor`,
+  `tesla_evtv_sunny_island`, `sunny_island_detail`, Sunny Island WebBox) are
+  stopped on start and their Ingress/Lovelace panels hidden so only this
+  **Sunny Island** sidebar entry remains. Option `retire_legacy_apps` (default
+  on); does **not** uninstall — remove those apps in Settings → Apps after
+  this one is running
+- **Fix:** Ingress no longer ships nginx. HAOS AppArmor cannot write
+  `/var/lib/nginx` or `/var/log/nginx`, and nginx `setgid(101)` is denied.
+  The plant UI is the Python server on `:8098` (`http_server.py`). Custom
+  `apparmor.txt` matches that path (no stale nginx directories)
+- `run.sh` still re-execs via `with-contenv` so `SUPERVISOR_TOKEN` is available
+  under s6-overlay
+
 ## 2.2.15
 
 - **Feature:** SI6048 WebBox **GetParameter / SetParameter** channels polled every
