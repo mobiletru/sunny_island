@@ -42,9 +42,12 @@ from .parser import parse_udp_packet
 from .runtime import PackRuntime
 from .webbox import (
     apply_grid_control_optimistic,
+    apply_rpc_param_optimistic,
     async_poll_webbox,
     async_set_grid_control,
+    async_write_rpc_parameter,
     merge_modbus_without_clobbering_rpc_params,
+    resolve_rpc_param,
 )
 from .webbox_modbus import (
     apply_si_parameter_optimistic,
@@ -197,6 +200,37 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
                 continue
             cfg = rt.webbox
             host = (cfg.get("host") or "").strip()
+            rpc_key = None
+            try:
+                rpc_key = resolve_rpc_param(param_key)
+            except ValueError:
+                rpc_key = None
+            if rpc_key:
+                session = async_get_clientsession(hass)
+                device_key = (
+                    (cfg.get("device_key") or rt.values.get("webbox_device_key") or "")
+                    or None
+                )
+                try:
+                    ok, stored = await async_write_rpc_parameter(
+                        session,
+                        host,
+                        rpc_key,
+                        value,
+                        password=cfg.get("password") or None,
+                        device_key=device_key,
+                    )
+                except ValueError as err:
+                    raise HomeAssistantError(str(err)) from err
+                if not ok:
+                    raise HomeAssistantError(
+                        f"WebBox parameter write failed: {rpc_key}={value!r} on {host}"
+                    )
+                apply_rpc_param_optimistic(rt.values, rpc_key, stored)
+                async_dispatcher_send(
+                    hass, SIGNAL_UPDATE_ENTITY.format(rt.name), rt.values
+                )
+                continue
             if not bool(cfg.get("modbus", True)):
                 raise HomeAssistantError(
                     "WebBox Modbus is disabled — enable it to write SI parameters"
@@ -312,8 +346,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "device_key": None,
         }
         fail_state = {"consecutive": 0, "last_warn": 0.0}
+        poll_lock = asyncio.Lock()
 
         async def poll_webbox(now=None):
+            # Overlapping 10s polls + 12s RPC retries wedge the WebBox TCP stack.
+            if poll_lock.locked():
+                _LOGGER.debug("[%s] WebBox poll still running for %s, skip", DOMAIN, webbox_host)
+                return
+            async with poll_lock:
+                await _poll_webbox_locked()
+
+        async def _poll_webbox_locked():
             values: dict = {}
             errors: list[str] = []
 
