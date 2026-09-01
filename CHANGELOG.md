@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.2.16
+
+- **Fix:** register `tesla_evtv_bms.set_webbox` (services.yaml + app overlay
+  called it; `__init__.py` never did — empty-host-must-not-wipe never ran)
+- **Fix:** SI6048 parameter +/- buttons used `Math.round` and sent `2` for a
+  2.27 V/cell bump and `59` for 59.3 Hz
+- **Fix:** `APP_VERSION` was the integration version (1.9.14) while the app
+  is 2.2.x — file again matches `config.yaml` / `SI_APP_VERSION`
+- **Fix:** Ingress `X-Ingress-Path` now injects `<base href>` so relative
+  css/js resolve when the sidebar URL has no trailing slash
+- **Fix:** ring gauges reset to — when entities are unavailable (no leftover
+  digits)
+- **Docs:** LiteCAN UDP 6550 is bound by the integration inside HA Core —
+  app `host_network: false` is correct (live plant already receives UDP)
+- Integration **1.9.15**
+
 ## 2.2.15
 
 - **Feature:** SI6048 WebBox **GetParameter / SetParameter** channels polled every

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import re
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -14,6 +15,28 @@ ALLOWED = {
     "::1",
     "172.30.32.2",  # Supervisor Ingress proxy
 }
+
+# Supervisor sets X-Ingress-Path (e.g. /4afc027a_sunny_island or
+# /api/hassio_ingress/<token>). Relative css/js break without a <base>
+# when the browser URL has no trailing slash.
+_INGRESS_PATH_RE = re.compile(r"^/[A-Za-z0-9._/-]*$")
+
+
+def ingress_base_href(header: str | None) -> str:
+    """Safe <base href> from X-Ingress-Path, or '' if missing/invalid."""
+    raw = (header or "").strip()
+    if not raw or raw == "/":
+        return ""
+    if not _INGRESS_PATH_RE.match(raw):
+        return ""
+    return raw.rstrip("/") + "/"
+
+
+def inject_ingress_base(html: str, header: str | None) -> str:
+    base = ingress_base_href(header)
+    if not base or "<base " in html.lower():
+        return html
+    return html.replace("<head>", f'<head>\n  <base href="{base}">', 1)
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -44,6 +67,21 @@ class Handler(SimpleHTTPRequestHandler):
             data = CONFIG.read_bytes() if CONFIG.is_file() else b""
             self.send_response(200)
             self.send_header("Content-Type", "application/javascript")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        translated = self.translate_path(path)
+        if translated.endswith("index.html") and os.path.isfile(translated):
+            try:
+                html = Path(translated).read_text(encoding="utf-8")
+            except OSError:
+                return super().do_GET()
+            html = inject_ingress_base(html, self.headers.get("X-Ingress-Path"))
+            data = html.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()

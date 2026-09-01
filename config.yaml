@@ -1,5 +1,5 @@
 name: Sunny Island
-version: "2.2.15"
+version: "2.2.16"
 slug: sunny_island
 description: >-
   One plant app: Tesla EVTV BMS + Ingress UI (parameter buttons, wrench quirks,
@@ -13,6 +13,8 @@ boot: auto
 startup: application
 hassio_api: true
 homeassistant_api: true
+# LiteCAN UDP 6550 is bound by tesla_evtv_bms inside HA Core, not this
+# container. host_network stays false; do not map 6550 on the app.
 host_network: false
 ingress: true
 ingress_port: 8098
