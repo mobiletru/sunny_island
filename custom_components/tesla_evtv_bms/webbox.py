@@ -56,7 +56,10 @@ RPC_PROCESS_MAP = {
     "InvPwrAt": ("webbox_device_power", "float_kw"),  # SI reports kW
     "Pac": ("webbox_device_power", "float_kw"),
     "ExtVtg": ("webbox_grid_voltage", "float"),
+    "ExtVtgSlv1": ("webbox_grid_voltage_l2", "float"),
     "ExtFrq": ("webbox_grid_frequency", "float"),
+    "ExtCur": ("webbox_grid_current", "float"),
+    "ExtCurSlv1": ("webbox_grid_current_l2", "float"),
     "Fac": ("webbox_grid_frequency", "float"),
     # Do not map ExtPwrAt → plant power (overwrites GriPwr with 0 when idle)
     "GdRmgTm": ("webbox_grid_connection_time", "float"),

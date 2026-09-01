@@ -108,6 +108,64 @@ def test_inject_ingress_base_once():
     assert '<base href="/4afc027a_sunny_island/">' in injected
 
 
+def format_value(fmt, raw):
+    """Mirror rootfs/www/js/app.js formatValue for the cases this plant uses."""
+    if raw is None or str(raw).lower() in {"unavailable", "unknown", "none", ""}:
+        return "—"
+    try:
+        num = float(raw)
+    except (TypeError, ValueError):
+        return str(raw)
+    if fmt == "number":
+        if abs(num) >= 1000:
+            return f"{num / 1000:.2f}"
+        return f"{num:.2f}" if abs(num) < 10 else f"{num:.1f}"
+    if fmt == "ah":
+        return f"{round(num)} Ah"
+    if fmt == "percent":
+        return f"{num:.1f}%"
+    if fmt == "amps":
+        sign = "+" if num >= 0 else ""
+        return f"{sign}{num:.1f} A"
+    if fmt == "volts":
+        return f"{num:.2f} V"
+    if fmt == "temp":
+        return f"{num:.1f} °C"
+    return str(raw)
+
+
+def test_capacity_format_ah_does_not_divide_by_1000():
+    """Live chip showed 2452 Ah while the tile rendered 2.45 via format number."""
+    assert format_value("number", 2452) == "2.45"
+    assert format_value("ah", 2452) == "2452 Ah"
+    assert format_value("ah", 2452.4) == "2452 Ah"
+    cfg = CONFIG_JS.read_text(encoding="utf-8")
+    assert "webboxBatAh:" in cfg
+    assert "format: 'ah'" in cfg
+    app = APP_JS.read_text(encoding="utf-8")
+    assert "case 'ah':" in app
+    assert "Math.round(num) + ' Ah'" in app
+
+
+def test_grid_ext_tiles_in_plant_ui():
+    html = (ROOT / "rootfs" / "www" / "index.html").read_text(encoding="utf-8")
+    assert 'data-metric="webboxGridA"' in html
+    assert 'data-metric="webboxGridAL2"' in html
+    assert 'data-metric="webboxGridVL2"' in html
+    cfg = CONFIG_JS.read_text(encoding="utf-8")
+    assert "pack('webbox_grid_current')" in cfg
+    assert "pack('webbox_grid_current_l2')" in cfg
+    assert "Grid A (ext L1)" in cfg
+
+
+def test_si_tile_formats_match_live_pack_convention():
+    assert format_value("percent", 43) == "43.0%"
+    assert format_value("amps", -156.2) == "-156.2 A"
+    assert format_value("amps", 45.0) == "+45.0 A"
+    assert format_value("volts", 42.10) == "42.10 V"
+    assert format_value("temp", 72.3) == "72.3 °C"
+
+
 def test_http_health_and_ingress_index(tmp_path, monkeypatch):
     """Watchdog /health and X-Ingress-Path <base> against the real handler."""
     import threading

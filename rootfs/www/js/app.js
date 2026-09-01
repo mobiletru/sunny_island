@@ -532,7 +532,7 @@
     });
   }
 
-  /** WebBox SMA reg 40527 — manual grid request / automatic / off */
+  /** Grid start: RPC GdManStr (Start / Auto / Stop). Do not write 40527. */
   function bindGridStartButtons() {
     const labels = {
       manual_on: 'Start grid (manual request)',
@@ -706,6 +706,8 @@
       case 'number':
         if (Math.abs(num) >= 1000) return (num / 1000).toFixed(2);
         return num.toFixed(Math.abs(num) < 10 ? 2 : 1);
+      case 'ah':
+        return Math.round(num) + ' Ah';
       default:
         return String(raw);
     }

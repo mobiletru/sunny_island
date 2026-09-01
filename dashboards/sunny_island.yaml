@@ -229,7 +229,13 @@ views:
           - entity: sensor.battery_storage_tesla_pack_webbox_grid_relay
             name: Grid relay
           - entity: sensor.battery_storage_tesla_pack_webbox_grid_voltage
-            name: Grid V
+            name: Grid V (ext L1)
+          - entity: sensor.battery_storage_tesla_pack_webbox_grid_voltage_l2
+            name: Grid V (ext L2)
+          - entity: sensor.battery_storage_tesla_pack_webbox_grid_current
+            name: Grid A (ext L1)
+          - entity: sensor.battery_storage_tesla_pack_webbox_grid_current_l2
+            name: Grid A (ext L2)
           - entity: sensor.battery_storage_tesla_pack_webbox_grid_frequency
             name: Grid Hz
 
@@ -707,7 +713,15 @@ views:
           - entity: sensor.battery_storage_tesla_pack_webbox_device_power
             name: Power AC
           - entity: sensor.battery_storage_tesla_pack_webbox_grid_voltage
-            name: Grid voltage
+            name: Grid V (ext L1)
+          - entity: sensor.battery_storage_tesla_pack_webbox_grid_voltage_l2
+            name: Grid V (ext L2)
+          - entity: sensor.battery_storage_tesla_pack_webbox_grid_current
+            name: Grid A (ext L1)
+          - entity: sensor.battery_storage_tesla_pack_webbox_grid_current_l2
+            name: Grid A (ext L2)
+          - entity: sensor.battery_storage_tesla_pack_webbox_inverter_voltage
+            name: SI AC V L1 (30783)
           - entity: sensor.battery_storage_tesla_pack_webbox_grid_frequency
             name: Grid frequency
           - entity: sensor.battery_storage_tesla_pack_webbox_grid_relay
@@ -760,6 +774,12 @@ views:
             name: Device W
           - entity: sensor.battery_storage_tesla_pack_webbox_grid_voltage
             name: Grid V
+          - entity: sensor.battery_storage_tesla_pack_webbox_grid_voltage_l2
+            name: Grid V L2
+          - entity: sensor.battery_storage_tesla_pack_webbox_grid_current
+            name: Grid A
+          - entity: sensor.battery_storage_tesla_pack_webbox_grid_current_l2
+            name: Grid A L2
 
   - title: RPC
     path: rpc
@@ -915,6 +935,12 @@ views:
             name: InvPwrAt / Pac (W)
           - entity: sensor.battery_storage_tesla_pack_webbox_grid_voltage
             name: ExtVtg
+          - entity: sensor.battery_storage_tesla_pack_webbox_grid_voltage_l2
+            name: ExtVtgSlv1
+          - entity: sensor.battery_storage_tesla_pack_webbox_grid_current
+            name: ExtCur
+          - entity: sensor.battery_storage_tesla_pack_webbox_grid_current_l2
+            name: ExtCurSlv1
           - entity: sensor.battery_storage_tesla_pack_webbox_grid_frequency
             name: ExtFrq / Fac
           - entity: sensor.battery_storage_tesla_pack_webbox_operating_status
@@ -1035,6 +1061,8 @@ views:
             name: °C
           - entity: sensor.battery_storage_tesla_pack_webbox_grid_voltage
             name: Grid V
+          - entity: sensor.battery_storage_tesla_pack_webbox_grid_current
+            name: Grid A
 
   - title: Solar & car
     path: solar-car

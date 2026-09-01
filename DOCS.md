@@ -52,6 +52,13 @@ WebBox is built into the **Tesla EVTV BMS** integration (Sunny Island app):
 
 Creates `sensor.<pack_prefix>_webbox_*` — plant power/yields, grid V/Hz, SI battery V/temp/SoC, status, reactive/apparent, serials, **grid start** sensors (connection timer, operating status, generator status, grid control mode).
 
+SI battery Modbus (unit 3, SI-Modbus-BA-en-12): **30845** SoC % · **30851** V
+FIX2 · **30843** A FIX3 sign-flipped to − discharge / + charge · **30849** SI
+sensor °C FIX1. Do not poll Sunny Boy **30805 / 30813 / 30217 / 30865**.
+
+External grid (WEBBOX-MODBUS-TB-EN-19 SI table): **30903/30905** ExtVtg L1/L2,
+**30909/30911** ExtCur L1/L2 (signed A). **30783** InvVtg is kept as fallback.
+
 ### Grid start / control (parameter write)
 
 **Start grid** (plant UI button / select / service) writes **WebBox JSON-RPC
