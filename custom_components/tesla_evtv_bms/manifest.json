@@ -1,7 +1,7 @@
 {
   "domain": "tesla_evtv_bms",
   "name": "Tesla EVTV BMS",
-  "version": "1.9.15",
+  "version": "1.9.16",
   "documentation": "https://github.com/mobiletru/sunny_island",
   "issue_tracker": "https://github.com/mobiletru/sunny_island/issues",
   "requirements": [],

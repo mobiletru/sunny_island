@@ -55,6 +55,7 @@ from .webbox import (
     resolve_rpc_param,
 )
 from .webbox_modbus import (
+    apply_si_modbus_derived,
     apply_si_parameter_optimistic,
     async_poll_webbox_modbus,
     async_write_si_parameter,
@@ -465,6 +466,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 fail_state["consecutive"] = 0
 
             if values:
+                # Relay / apparent from the merged bag (RPC OpStt + Modbus P).
+                # Never write 40527 here — grid start is RPC GdManStr only.
+                apply_si_modbus_derived(values)
                 # kW mirror when HTTP-only power is present (Modbus path already sets it)
                 if "webbox_power" in values and "webbox_power_kw" not in values:
                     try:

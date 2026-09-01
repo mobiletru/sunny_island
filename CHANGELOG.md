@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.2.17
+
+- **Fix:** SI Modbus map now matches SI-Modbus-BA-en-12 on this 12S ~42 V
+  plant — `30845` is SoC % (was shown as 45–46 V), `30851` is battery V
+  FIX2 (42.10 V), `30843` current FIX3 is sign-flipped to the plant legend
+  (− discharge / + charge). Dropped Sunny Boy `30865` SoC (live 0.0%).
+- **Fix:** do not poll Sunny Boy `30805` / `30813` / `30217` — reactive
+  was pinned at −700 var; grid relay and apparent were blank. Relay is
+  derived from operating status `33003`; apparent from |P|.
+- **Fix:** plant UI battery capacity uses format `ah` so 2452 Ah is not
+  shown as 2.45.
+- **Note:** `30849` stays °C FIX1 (SI sensor — live 72.3 °C is not Tesla
+  brick temp and not °F). Power-setpoint timeout still reads `41195`;
+  blank means the SI6048/WebBox does not expose it. Grid start remains
+  RPC `GdManStr` — do not write `40527`.
+- Integration **1.9.16**
+
 ## 2.2.16
 
 - **Fix:** register `tesla_evtv_bms.set_webbox` (services.yaml + app overlay

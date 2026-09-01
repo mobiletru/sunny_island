@@ -53,16 +53,32 @@ def test_status_labels():
     assert mb.grid_relay_label(0) == "Open"
 
 
-def test_registers_include_apparent_and_core_params():
+def _reg(key: str):
+    for row in mb.WEBBOX_MODBUS_REGISTERS:
+        if row[0] == key:
+            return row
+    raise AssertionError(f"missing register {key}")
+
+
+def test_registers_include_core_params_not_sunny_boy():
     keys = {row[0] for row in mb.WEBBOX_MODBUS_REGISTERS}
     assert "webbox_power" in keys
-    assert "webbox_apparent_power" in keys
     assert "webbox_grid_voltage" in keys
     assert "webbox_battery_voltage" in keys
     assert "webbox_device_power" in keys
     assert "webbox_grid_connection_time" in keys
     assert "webbox_grid_control_code" in keys
     assert "webbox_operating_status_code" in keys
+    assert "webbox_power_setpoint_timeout" in keys
+    # Sunny Boy-only — blank or pinned on SI6048; derive instead of poll.
+    assert "webbox_apparent_power" not in keys
+    assert "webbox_reactive_power" not in keys
+    assert "webbox_grid_relay_code" not in keys
+    addrs = {row[2] for row in mb.WEBBOX_MODBUS_REGISTERS}
+    assert 30805 not in addrs
+    assert 30813 not in addrs
+    assert 30217 not in addrs
+    assert 30865 not in addrs
 
 
 def test_power_kw_derived_from_plant_power():
@@ -93,7 +109,7 @@ def test_si_parameter_registers_and_labels():
     assert mb.reverse_feed_label(1129) == "Yes"
     assert mb.reverse_feed_label(1130) == "No"
     assert mb.power_setpoint_mode_label(1079) == "External"
-    # FIX3 battery current
+    # Raw SMA FIX3 (+discharge). Plant tile uses the flipped table scale.
     val = mb._decode_regs([0, 1500], "s32", 0.001)
     assert abs(val - 1.5) < 1e-9
 
@@ -113,3 +129,74 @@ def test_write_holding_u32_pdu_shape():
     assert pdu[0] == 0x10
     assert struct.unpack(">H", pdu[1:3])[0] == 40527
     assert struct.unpack(">HH", pdu[-4:]) == (0, 308)
+
+
+def test_30845_is_soc_not_voltage_and_not_30865():
+    """Live plant: 30845=45–46 was shown as V; 30865 SoC sat at 0%."""
+    key, _unit, addr, count, dtype, scale = _reg("webbox_battery_soc")
+    assert key == "webbox_battery_soc"
+    assert addr == 30845
+    assert count == 2
+    assert dtype == "u32"
+    assert scale == 1.0
+    assert _reg("webbox_battery_voltage")[2] == 30851
+    assert 30865 not in {row[2] for row in mb.WEBBOX_MODBUS_REGISTERS}
+    assert mb._decode_regs([0, 45], "u32", 1.0) == 45
+    assert mb._decode_regs([0, 43], "u32", 1.0) == 43
+
+
+def test_30851_voltage_fix2_matches_12s_pack():
+    """Live pack 42.07–42.10 V is U32 FIX2 on 30851, not whole-volt 30845."""
+    _key, _unit, addr, _count, dtype, scale = _reg("webbox_battery_voltage")
+    assert addr == 30851
+    assert dtype == "u32"
+    assert scale == 0.01
+    val = mb._decode_regs([0, 4210], dtype, scale)
+    assert abs(val - 42.10) < 1e-9
+    val_lo = mb._decode_regs([0, 4207], dtype, scale)
+    assert abs(val_lo - 42.07) < 1e-9
+
+
+def test_30843_current_sign_flipped_to_plant_convention():
+    """SMA 30843 is +discharge FIX3. Plant legend is − discharge / + charge."""
+    _key, _unit, addr, _count, dtype, scale = _reg("webbox_battery_current")
+    assert addr == 30843
+    assert dtype == "s32"
+    assert scale == -0.001
+    # Live: SMA raw +156000 (FIX3, +discharge) while pack current was −156 A.
+    raw_dis = 156000
+    discharge = mb._decode_regs([(raw_dis >> 16) & 0xFFFF, raw_dis & 0xFFFF], dtype, scale)
+    assert abs(discharge - (-156.0)) < 1e-9
+    # SMA −45000 raw = charging 45 A; plant sign flip → +45 A.
+    raw_charge = (-45000) & 0xFFFFFFFF
+    charge = mb._decode_regs(
+        [(raw_charge >> 16) & 0xFFFF, raw_charge & 0xFFFF], dtype, scale
+    )
+    assert abs(charge - 45.0) < 1e-9
+
+
+def test_30849_temp_is_celsius_fix1():
+    """72.3 is SI sensor °C FIX1, not °F and not Tesla brick temp."""
+    _key, _unit, addr, _count, dtype, scale = _reg("webbox_battery_temp")
+    assert addr == 30849
+    assert dtype == "u32"
+    assert scale == 0.1
+    assert abs(mb._decode_regs([0, 723], dtype, scale) - 72.3) < 1e-9
+
+
+def test_apply_si_modbus_derived_relay_apparent_clears_reactive():
+    out = mb.apply_si_modbus_derived(
+        {"webbox_operating_status_code": 1463, "webbox_device_power": -6700}
+    )
+    assert out["webbox_grid_relay"] == "Open"
+    assert out["webbox_apparent_power"] == 6700
+    assert out["webbox_reactive_power"] is None
+
+    grid = mb.apply_si_modbus_derived(
+        {"webbox_operating_status": "Parallel grid", "webbox_power": -100}
+    )
+    assert grid["webbox_grid_relay"] == "Closed"
+    assert grid["webbox_apparent_power"] == 100
+    # Stale Sunny Boy Q must not survive a poll that no longer reads 30805.
+    stale = mb.apply_si_modbus_derived({})
+    assert stale["webbox_reactive_power"] is None

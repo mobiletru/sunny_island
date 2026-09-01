@@ -29,10 +29,11 @@ WEBBOX_MODBUS_REGISTERS: tuple[tuple[str, int, int, int, str, float], ...] = (
     ("webbox_device_power", 3, 30775, 2, "s32", 1.0),
     ("webbox_grid_voltage", 3, 30783, 2, "s32", 0.01),
     ("webbox_grid_frequency", 3, 30803, 2, "u32", 0.01),
-    ("webbox_reactive_power", 3, 30805, 2, "s32", 0.01),  # FIX2 (var)
-    ("webbox_apparent_power", 3, 30813, 2, "s32", 1.0),
+    # 30805 / 30813 are Sunny Boy. On SI6048 they are missing or a constant
+    # (live plant: reactive stuck at −700 var, apparent blank). Do not poll.
     ("webbox_status_code", 3, 30201, 2, "s32", 1.0),
-    ("webbox_grid_relay_code", 3, 30217, 2, "u32", 1.0),
+    # 30217 grid-relay TAGLIST is Sunny Boy; SI6048 leaves the tile blank.
+    # Relay is derived from 33003 after the poll (see apply_si_modbus_derived).
     # Grid start / connection
     ("webbox_grid_connection_time", 3, 30199, 2, "u32", 1.0),  # s until attempt
     ("webbox_operating_status_code", 3, 33003, 2, "u32", 1.0),
@@ -40,11 +41,13 @@ WEBBOX_MODBUS_REGISTERS: tuple[tuple[str, int, int, int, str, float], ...] = (
     # Manual control of utility grid: 303=Off · 308=On · 1438=Automatic
     ("webbox_grid_control_code", 3, 40527, 2, "u32", 1.0),
     ("webbox_operating_time", 3, 30541, 2, "u32", 1.0),
-    # SI battery (this plant: bus V on 30845 FIX0; SoC 30865; SI profile also has 30843/30851)
-    ("webbox_battery_voltage", 3, 30845, 2, "s32", 1.0),
-    ("webbox_battery_soc", 3, 30865, 2, "u32", 1.0),
-    ("webbox_battery_temp", 3, 30849, 2, "s32", 0.1),
-    ("webbox_battery_current", 3, 30843, 2, "s32", 0.001),  # A FIX3
+    # SMA SI profile (SI-Modbus-BA-en-12). 30845 is SoC, not volts —
+    # the old map showed live SoC 45–46 as "45.00 V" and SoC 0% from 30865.
+    ("webbox_battery_soc", 3, 30845, 2, "u32", 1.0),  # % FIX0
+    ("webbox_battery_voltage", 3, 30851, 2, "u32", 0.01),  # V FIX2
+    ("webbox_battery_temp", 3, 30849, 2, "u32", 0.1),  # °C FIX1 (SI sensor)
+    # SMA documents +discharge on 30843. Plant legend is − discharge · + charge.
+    ("webbox_battery_current", 3, 30843, 2, "s32", -0.001),  # A FIX3, sign flipped
     # SI parameters (SoC limits / feed-in / power-setpoint mode)
     ("webbox_discharge_limit", 3, 31009, 2, "u32", 1.0),  # % self-consumption floor
     ("webbox_reverse_feed_code", 3, 40679, 2, "u32", 1.0),  # 1129 Yes · 1130 No
@@ -153,7 +156,7 @@ def _decode_regs(regs: list[int], dtype: str, scale: float) -> float | int | Non
             return None
         val = raw * scale
         if scale != 1.0:
-            return round(float(val), 6 if scale < 0.01 else 3)
+            return round(float(val), 6 if abs(scale) < 0.01 else 3)
         return int(val) if float(val).is_integer() else float(val)
     except Exception:  # noqa: BLE001
         return None
@@ -360,6 +363,56 @@ async def async_poll_webbox_modbus(
             out["webbox_power_kw"] = round(float(out["webbox_power"]) / 1000.0, 3)
         except (TypeError, ValueError):
             pass
+    apply_si_modbus_derived(out)
+    return out
+
+
+def apply_si_modbus_derived(out: dict[str, Any]) -> dict[str, Any]:
+    """Fill SI tiles that have no legal register on SI6048.
+
+    Grid relay 30217 and apparent/reactive 30813/30805 are Sunny Boy — they
+    stay blank or pin a constant on this plant. Derive relay from operating
+    status; apparent from P (and Q only when a real Q exists). Clear stale
+    reactive so a leftover −700 var from 30805 cannot stick.
+    """
+    if "webbox_reactive_power" not in out:
+        out["webbox_reactive_power"] = None
+
+    if "webbox_grid_relay" not in out or not out.get("webbox_grid_relay"):
+        op = out.get("webbox_operating_status_code")
+        try:
+            op_i = int(op) if op is not None else None
+        except (TypeError, ValueError):
+            op_i = None
+        if op_i == 235:  # Parallel grid
+            out["webbox_grid_relay"] = "Closed"
+            out.setdefault("webbox_grid_relay_code", 51)
+        elif op_i == 1463:  # Backup / island
+            out["webbox_grid_relay"] = "Open"
+            out.setdefault("webbox_grid_relay_code", 311)
+        else:
+            text = str(out.get("webbox_operating_status") or "").lower()
+            if "parallel" in text:
+                out["webbox_grid_relay"] = "Closed"
+                out.setdefault("webbox_grid_relay_code", 51)
+            elif "backup" in text or "island" in text:
+                out["webbox_grid_relay"] = "Open"
+                out.setdefault("webbox_grid_relay_code", 311)
+
+    if "webbox_apparent_power" not in out or out.get("webbox_apparent_power") is None:
+        p = out.get("webbox_device_power")
+        if p is None:
+            p = out.get("webbox_power")
+        q = out.get("webbox_reactive_power")
+        try:
+            pf = float(p) if p is not None else None
+            qf = float(q) if q is not None else None
+        except (TypeError, ValueError):
+            pf = qf = None
+        if pf is not None and qf is not None:
+            out["webbox_apparent_power"] = round((pf * pf + qf * qf) ** 0.5)
+        elif pf is not None:
+            out["webbox_apparent_power"] = round(abs(pf))
     return out
 
 

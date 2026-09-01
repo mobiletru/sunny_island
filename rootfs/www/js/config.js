@@ -96,7 +96,7 @@ const METRICS = {
   webboxStatusCode: { entity: pack('webbox_status_code'), label: 'Status Code', format: 'int', group: 'webbox' },
   webboxRelay: { entity: pack('webbox_grid_relay'), label: 'Grid Relay', format: 'text', group: 'webbox' },
   webboxRelayCode: { entity: pack('webbox_grid_relay_code'), label: 'Grid Relay Code', format: 'int', group: 'webbox' },
-  // Grid start / connection (Modbus 30199 · 33003 · 30917 · 40527)
+  // Grid start / connection (Modbus 30199 · 33003 · 30917; write is RPC GdManStr)
   webboxGridConnTime: {
     entity: pack('webbox_grid_connection_time'),
     label: 'Grid start timer',
@@ -135,7 +135,7 @@ const METRICS = {
   },
   webboxBattV: { entity: pack('webbox_battery_voltage'), label: 'SI Battery V', format: 'volts', group: 'webbox' },
   webboxBattSoc: { entity: pack('webbox_battery_soc'), label: 'SI Battery SoC', format: 'percent', group: 'webbox' },
-  webboxBattTemp: { entity: pack('webbox_battery_temp'), label: 'SI Battery Temp', format: 'temp', group: 'webbox' },
+  webboxBattTemp: { entity: pack('webbox_battery_temp'), label: 'SI temp', format: 'temp', group: 'webbox' },
   webboxBattA: { entity: pack('webbox_battery_current'), label: 'SI Battery A', format: 'amps', group: 'webbox' },
   webboxChargeV: { entity: pack('webbox_charge_voltage'), label: 'SI charge voltage (live)', format: 'volts', group: 'si' },
   webboxChargeVFull: { entity: pack('webbox_charge_voltage_full'), label: 'Full / absorption V/cell', format: 'cell', group: 'si' },
@@ -152,7 +152,7 @@ const METRICS = {
   webboxAptFul: { entity: pack('webbox_absorption_time_full'), label: 'Full time', format: 'number', group: 'si' },
   webboxBatTyp: { entity: pack('webbox_battery_type'), label: 'Battery type', format: 'text', group: 'si' },
   webboxBatNomV: { entity: pack('webbox_battery_nominal_v'), label: 'Battery nominal V', format: 'volts', group: 'si' },
-  webboxBatAh: { entity: pack('webbox_battery_capacity_ah'), label: 'Battery capacity', format: 'number', group: 'si' },
+  webboxBatAh: { entity: pack('webbox_battery_capacity_ah'), label: 'Battery capacity', format: 'ah', group: 'si' },
   webboxSlfCsmp: { entity: pack('webbox_self_consumption_min'), label: 'Self-consumption min SoC', format: 'percent', group: 'si' },
   webboxSilent: { entity: pack('webbox_silent_enable'), label: 'Silent charge', format: 'text', group: 'si' },
   webboxSleep: { entity: pack('webbox_sleep_enable'), label: 'Sleep', format: 'text', group: 'si' },
@@ -234,7 +234,7 @@ const METRICS = {
   webboxApparent: { entity: pack('webbox_apparent_power'), label: 'Apparent Power', format: 'power', group: 'webbox' },
 };
 
-/** Select entity that writes SMA 40527 (Off / Manual On / Automatic). */
+/** Select entity that writes RPC GdManStr (Off / Manual On / Automatic). */
 function gridControlSelectId() {
   return `select.${PACK_PREFIX}_webbox_grid_control`;
 }
@@ -887,7 +887,7 @@ const PARAM_CONTROLS = [
   },
   {
     id: 'ro_si_temp',
-    title: 'SI battery temp',
+    title: 'SI temp',
     group: 'Live status',
     metric: 'webboxBattTemp',
     kind: 'readonly',

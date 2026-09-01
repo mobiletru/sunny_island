@@ -87,6 +87,30 @@ def test_merge_modbus_keeps_rpc_params():
     assert out["webbox_power"] == -100
 
 
+def test_merge_then_derived_fills_relay_and_clears_reactive():
+    from tesla_evtv_bms import webbox_modbus as mb
+
+    http = {
+        "webbox_operating_status": "Backup",
+        "webbox_power": -6700,
+        "webbox_grid_man_str": "Auto",
+        "webbox_grid_control_option": "automatic",
+    }
+    mb_vals = {
+        "webbox_battery_soc": 43,
+        "webbox_battery_voltage": 42.10,
+        "webbox_battery_current": -156.0,
+        "webbox_grid_control_code": 303,
+    }
+    out = wb.merge_modbus_without_clobbering_rpc_params(http, mb_vals)
+    mb.apply_si_modbus_derived(out)
+    assert out["webbox_grid_control_option"] == "automatic"
+    assert out["webbox_battery_soc"] == 43
+    assert out["webbox_grid_relay"] == "Open"
+    assert out["webbox_apparent_power"] == 6700
+    assert out["webbox_reactive_power"] is None
+
+
 def test_password_hash_sma():
     # Documented WebBox default access password (plain "sma" → MD5 hex)
     h = wb.webbox_password_hash("sma")
