@@ -15,8 +15,11 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
+    ATTR_ENTRY_ID,
+    ATTR_HOST,
     ATTR_MODE,
     ATTR_PARAMETER,
+    ATTR_PASSWORD,
     ATTR_VALUE,
     CONF_WEBBOX_HOST,
     CONF_WEBBOX_MODBUS,
@@ -36,7 +39,9 @@ from .const import (
     PLATFORMS,
     SERVICE_SET_GRID_CONTROL,
     SERVICE_SET_SI_PARAMETER,
+    SERVICE_SET_WEBBOX,
     SIGNAL_UPDATE_ENTITY,
+    webbox_data_updates,
 )
 from .parser import parse_udp_packet
 from .runtime import PackRuntime
@@ -71,6 +76,14 @@ SERVICE_SET_SI_PARAMETER_SCHEMA = vol.Schema(
         vol.Required(ATTR_VALUE): vol.Any(cv.string, int, float, bool),
         vol.Optional("entity_prefix"): cv.string,
         vol.Optional("name"): cv.string,
+    }
+)
+
+SERVICE_SET_WEBBOX_SCHEMA = vol.Schema(
+    {
+        vol.Optional(ATTR_HOST): cv.string,
+        vol.Optional(ATTR_PASSWORD): cv.string,
+        vol.Optional(ATTR_ENTRY_ID): cv.string,
     }
 )
 
@@ -265,6 +278,40 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         SERVICE_SET_SI_PARAMETER,
         _handle_set_si_parameter,
         schema=SERVICE_SET_SI_PARAMETER_SCHEMA,
+    )
+
+    async def _handle_set_webbox(call: ServiceCall) -> None:
+        """Overlay WebBox host/password onto entry.data. Empty fields are omitted."""
+        host = call.data.get(ATTR_HOST)
+        password = call.data.get(ATTR_PASSWORD)
+        entry_id = (call.data.get(ATTR_ENTRY_ID) or "").strip()
+        entries = list(hass.config_entries.async_entries(DOMAIN))
+        if entry_id:
+            entries = [entry for entry in entries if entry.entry_id == entry_id]
+            if not entries:
+                raise HomeAssistantError(
+                    f"Tesla EVTV BMS entry {entry_id!r} not found"
+                )
+        if not entries:
+            raise HomeAssistantError("No Tesla EVTV BMS config entry found")
+        for entry in entries:
+            updates = webbox_data_updates(
+                dict(entry.data),
+                host=host,
+                password=password,
+            )
+            if not updates:
+                continue
+            hass.config_entries.async_update_entry(
+                entry, data={**dict(entry.data), **updates}
+            )
+            await hass.config_entries.async_reload(entry.entry_id)
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_WEBBOX,
+        _handle_set_webbox,
+        schema=SERVICE_SET_WEBBOX_SCHEMA,
     )
     return True
 

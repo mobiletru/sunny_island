@@ -422,17 +422,22 @@ APP_AUTOMATION_ENTITIES = (
 )
 
 
-def _ha_token() -> str:
-    return (
+def _ha_token(opts: dict | None = None) -> str:
+    tok = (
         os.environ.get("SUPERVISOR_TOKEN")
         or os.environ.get("HASSIO_TOKEN")
         or ""
     ).strip()
+    if tok:
+        return tok
+    if opts:
+        return str(opts.get("ha_token") or "").strip()
+    return ""
 
 
-def _enable_app_automations() -> list[str]:
+def _enable_app_automations(opts: dict | None = None) -> list[str]:
     """Turn on app-managed automations via Core API (they often stay off after reloads)."""
-    token = _ha_token()
+    token = _ha_token(opts)
     if not token:
         return ["skip enable automations (no SUPERVISOR_TOKEN)"]
     actions: list[str] = []
@@ -568,7 +573,7 @@ def main() -> int:
 
         # Keep plant automations ON (HA often leaves them disabled after YAML reload)
         try:
-            for msg in _enable_app_automations():
+            for msg in _enable_app_automations(opts):
                 actions.append(msg)
                 print(f"[sunny_island] {msg}")
         except Exception as exc:  # noqa: BLE001

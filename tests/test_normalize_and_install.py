@@ -158,19 +158,20 @@ def test_render_config_rewrites_prefixes():
 
 
 def test_bms_flow_payload_defaults():
-    install = _load_script("install_integration.py")
-    payload = install._bms_flow_payload({})
+    setup = _load_script("bms_setup.py")
+    payload = setup._bms_flow_payload({})
     assert payload["port"] == 6550
     assert payload["entity_prefix"] == "battery_storage_tesla_pack"
     assert payload["name"] == "Tesla Pack"
     assert payload["cells_in_series"] == 12
+    assert payload["pack_size"] == 75.0
     assert payload["webbox_modbus"] is True
     assert payload["webbox_host"] == ""
 
 
 def test_bms_flow_payload_from_options():
-    install = _load_script("install_integration.py")
-    payload = install._bms_flow_payload(
+    setup = _load_script("bms_setup.py")
+    payload = setup._bms_flow_payload(
         {
             "pack_prefix": "battery_storage_tesla_pack",
             "bms_udp_port": "6551",
@@ -182,22 +183,23 @@ def test_bms_flow_payload_from_options():
 
 
 def test_ensure_packages_include_appends_when_missing():
-    install = _load_script("install_integration.py")
+    setup = _load_script("bms_setup.py")
     with tempfile.TemporaryDirectory() as td:
         ha = Path(td)
-        install.HA_CONFIG = ha
+        setup.HA_CONFIG = ha
         cfg = ha / "configuration.yaml"
         cfg.write_text("default_config:\n", encoding="utf-8")
-        msg = install._ensure_packages_include()
+        msg = setup._ensure_packages_include()
         text = cfg.read_text(encoding="utf-8")
         assert "include_dir_named packages" in text
         assert "added" in msg
-        again = install._ensure_packages_include()
+        again = setup._ensure_packages_include()
         assert again == "packages include already present"
 
 
 def test_ha_token_falls_back_to_options():
     install = _load_script("install_integration.py")
+    setup = _load_script("bms_setup.py")
     saved = {
         k: os.environ.pop(k)
         for k in ("SUPERVISOR_TOKEN", "HASSIO_TOKEN")
@@ -206,5 +208,45 @@ def test_ha_token_falls_back_to_options():
     try:
         assert install._ha_token() == ""
         assert install._ha_token({"ha_token": "abc"}) == "abc"
+        assert setup._ha_token() == ""
+        assert setup._ha_token({"ha_token": "abc"}) == "abc"
     finally:
         os.environ.update(saved)
+
+
+def test_webbox_data_updates_empty_does_not_wipe():
+    existing = {
+        "name": "Tesla Pack",
+        "port": 6550,
+        "entity_prefix": "battery_storage_tesla_pack",
+        "webbox_host": "192.168.1.180",
+        "webbox_password": "sma",
+    }
+    assert const.webbox_data_updates(existing, host="", password="") == {}
+    assert const.webbox_data_updates(existing, host=None, password=None) == {}
+    assert const.webbox_data_updates(existing, host="   ", password="  ") == {}
+    # Unchanged overlay is a no-op (idempotent)
+    assert const.webbox_data_updates(existing, host="192.168.1.180") == {}
+    changed = const.webbox_data_updates(existing, host="192.168.1.50")
+    assert changed == {"webbox_host": "192.168.1.50"}
+    assert "webbox_password" not in changed
+
+
+def test_sync_webbox_omits_empty_addon_fields():
+    setup = _load_script("bms_setup.py")
+    desired = setup._webbox_from_opts({"webbox_host": "", "webbox_password": ""})
+    body: dict = {}
+    if desired["webbox_host"]:
+        body["host"] = desired["webbox_host"]
+    if desired["webbox_password"]:
+        body["password"] = desired["webbox_password"]
+    assert body == {}
+    desired = setup._webbox_from_opts(
+        {"webbox_host": " 10.0.0.8 ", "webbox_password": ""}
+    )
+    body = {}
+    if desired["webbox_host"]:
+        body["host"] = desired["webbox_host"]
+    if desired["webbox_password"]:
+        body["password"] = desired["webbox_password"]
+    assert body == {"host": "10.0.0.8"}
