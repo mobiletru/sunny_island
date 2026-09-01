@@ -459,12 +459,9 @@
       let value = btn.dataset.paramValue;
       if (btn.dataset.paramStep) {
         const cur = parseFloat(currentMetricValue(ctrl.metric));
-        const step = Number(ctrl.step) || 5;
-        let next = Number.isFinite(cur) ? cur : 0;
-        next = btn.dataset.paramStep === '+' ? next + step : next - step;
-        if (ctrl.min != null) next = Math.max(ctrl.min, next);
-        if (ctrl.max != null) next = Math.min(ctrl.max, next);
-        value = String(Math.round(next));
+        value = String(
+          nextParamStep(cur, ctrl.step, btn.dataset.paramStep, ctrl.min, ctrl.max)
+        );
       }
       if (value == null || value === '') return;
       if (!ctrl.write?.parameter) return;
@@ -786,16 +783,22 @@
         ? (power / 1000).toFixed(2) + ' kW'
         : Math.round(power) + ' W';
 
-    // Left gauges
+    // Left gauges — unavailable / NaN must show em-dash, not a leftover number.
     if (!isNaN(soc)) {
       const cls = soc < 20 ? 'mode-low' : soc < 50 ? 'mode-mid' : 'mode-high';
       setRing('g-soc-arc', soc, cls);
       $('#g-soc-val').textContent = soc.toFixed(0);
+    } else {
+      setRing('g-soc-arc', 0);
+      $('#g-soc-val').textContent = '—';
     }
     if (!isNaN(volts)) {
-      // 36–50 V range
+      // 12S Tesla on SI6048 ≈ 36–50 V (live plant ~42 V)
       setRing('g-volts-arc', ((volts - 36) / 14) * 100, 'mode-high');
       $('#g-volts-val').textContent = volts.toFixed(1);
+    } else {
+      setRing('g-volts-arc', 0);
+      $('#g-volts-val').textContent = '—';
     }
     if (!isNaN(current)) {
       // -200..200 → 0..100 with center idle
@@ -805,6 +808,9 @@
       setRing('g-amps-arc', pct, cls);
       $('#g-amps-val').textContent =
         (current >= 0 ? '+' : '') + (Math.abs(current) >= 100 ? Math.round(current) : current.toFixed(0));
+    } else {
+      setRing('g-amps-arc', 50, 'mode-idle');
+      $('#g-amps-val').textContent = '—';
     }
     if (!isNaN(power)) {
       const pct = Math.min(100, (Math.abs(power) / 15000) * 100);
@@ -813,14 +819,23 @@
       setRing('g-power-arc', pct, cls);
       $('#g-power-val').textContent =
         Math.abs(power) >= 1000 ? (power / 1000).toFixed(1) + 'k' : String(Math.round(power));
+    } else {
+      setRing('g-power-arc', 0);
+      $('#g-power-val').textContent = '—';
     }
     if (!isNaN(solar)) {
       setRing('g-solar-arc', Math.min(100, (solar / 15) * 100), 'mode-high');
       $('#g-solar-val').textContent = solar.toFixed(1);
+    } else {
+      setRing('g-solar-arc', 0);
+      $('#g-solar-val').textContent = '—';
     }
     if (!isNaN(load)) {
       setRing('g-load-arc', Math.min(100, (load / 15) * 100), 'mode-mid');
       $('#g-load-val').textContent = load.toFixed(1);
+    } else {
+      setRing('g-load-arc', 0);
+      $('#g-load-val').textContent = '—';
     }
 
     // Fault

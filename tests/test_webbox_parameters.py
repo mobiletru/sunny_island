@@ -92,3 +92,21 @@ def test_password_hash_sma():
     h = wb.webbox_password_hash("sma")
     assert len(h) == 32
     assert h == "a289fa4252ed5af8e3e9f9bee545c172"
+
+
+def test_render_rpc_keeps_charge_voltage_decimals():
+    spec = wb.RPC_PARAM_SPECS["charge_voltage_full"]
+    rendered, stored = wb._render_rpc_value(spec, "2.27")
+    assert rendered == "2.27"
+    assert stored == 2.27
+    # UI Math.round(2.27) used to send "2" — still a valid number, but wrong.
+    rendered_int, stored_int = wb._render_rpc_value(spec, "2")
+    assert rendered_int == "2.00"
+    assert stored_int == 2.0
+
+
+def test_render_rpc_keeps_grid_hz_tenths():
+    spec = wb.RPC_PARAM_SPECS["grid_frequency_min"]
+    rendered, stored = wb._render_rpc_value(spec, "59.3")
+    assert rendered == "59.3"
+    assert stored == 59.3

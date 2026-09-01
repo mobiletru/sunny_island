@@ -1069,6 +1069,23 @@ const QUIRKS = [
   },
 ];
 
+/**
+ * Next value for a SI6048 number-row +/- button.
+ * Must keep step decimals (V/cell 0.01, Hz 0.1). Math.round would send 2
+ * for a 2.27 V/cell bump and 59 for 59.3 Hz.
+ */
+function nextParamStep(current, step, direction, min, max) {
+  const parsedStep = Number(step);
+  const delta = Number.isFinite(parsedStep) && parsedStep !== 0 ? parsedStep : 5;
+  let next = Number.isFinite(current) ? current : 0;
+  next = direction === '+' ? next + delta : next - delta;
+  if (min != null && Number.isFinite(Number(min))) next = Math.max(Number(min), next);
+  if (max != null && Number.isFinite(Number(max))) next = Math.min(Number(max), next);
+  const stepStr = String(delta);
+  const decimals = stepStr.includes('.') ? stepStr.split('.')[1].length : 0;
+  return Number(next.toFixed(decimals));
+}
+
 function getAllEntityIds() {
   const ids = Object.values(METRICS).map((m) => m.entity);
   ids.push(gridControlSelectId());
