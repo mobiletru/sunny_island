@@ -10,5 +10,5 @@ __pycache__/
 # generated host merges (built into /config/scripts.yaml · automations.yaml)
 ha_config/*.merged.yaml
 
-# runtime / accidental dumps
-www/
+# runtime / accidental dumps (repo-root only — do not ignore rootfs/www)
+/www/
