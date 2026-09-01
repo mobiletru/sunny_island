@@ -87,6 +87,13 @@ def test_merge_modbus_keeps_rpc_params():
     assert out["webbox_power"] == -100
 
 
+def test_rpc_process_map_has_extcur():
+    assert wb.RPC_PROCESS_MAP["ExtCur"][0] == "webbox_grid_current"
+    assert wb.RPC_PROCESS_MAP["ExtCurSlv1"][0] == "webbox_grid_current_l2"
+    assert wb.RPC_PROCESS_MAP["ExtVtg"][0] == "webbox_grid_voltage"
+    assert wb.RPC_PROCESS_MAP["ExtVtgSlv1"][0] == "webbox_grid_voltage_l2"
+
+
 def test_merge_then_derived_fills_relay_and_clears_reactive():
     from tesla_evtv_bms import webbox_modbus as mb
 

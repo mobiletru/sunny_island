@@ -147,6 +147,17 @@ def test_capacity_format_ah_does_not_divide_by_1000():
     assert "Math.round(num) + ' Ah'" in app
 
 
+def test_grid_ext_tiles_in_plant_ui():
+    html = (ROOT / "rootfs" / "www" / "index.html").read_text(encoding="utf-8")
+    assert 'data-metric="webboxGridA"' in html
+    assert 'data-metric="webboxGridAL2"' in html
+    assert 'data-metric="webboxGridVL2"' in html
+    cfg = CONFIG_JS.read_text(encoding="utf-8")
+    assert "pack('webbox_grid_current')" in cfg
+    assert "pack('webbox_grid_current_l2')" in cfg
+    assert "Grid A (ext L1)" in cfg
+
+
 def test_si_tile_formats_match_live_pack_convention():
     assert format_value("percent", 43) == "43.0%"
     assert format_value("amps", -156.2) == "-156.2 A"

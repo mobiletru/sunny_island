@@ -27,8 +27,18 @@ WEBBOX_MODBUS_REGISTERS: tuple[tuple[str, int, int, int, str, float], ...] = (
     ("webbox_total_yield", 2, 30513, 4, "u64", 0.001),  # Wh → kWh
     # Device / Sunny Island on RS485 behind WebBox
     ("webbox_device_power", 3, 30775, 2, "s32", 1.0),
-    ("webbox_grid_voltage", 3, 30783, 2, "s32", 0.01),
-    ("webbox_grid_frequency", 3, 30803, 2, "u32", 0.01),
+    # 30783 InvVtg — keep (live ~120.98 V). Official WEBBOX-MODBUS-TB-EN-19 SI
+    # table: U32 FIX2. External mains V/A are 30903–30913 (ExtVtg / ExtCur).
+    ("webbox_inverter_voltage", 3, 30783, 2, "u32", 0.01),  # InvVtg L1
+    ("webbox_inverter_voltage_l2", 3, 30785, 2, "u32", 0.01),  # InvVtgSlv1
+    ("webbox_grid_voltage", 3, 30903, 2, "u32", 0.01),  # ExtVtg L1
+    ("webbox_grid_voltage_l2", 3, 30905, 2, "u32", 0.01),  # ExtVtgSlv1 (2Phase2)
+    ("webbox_grid_frequency", 3, 30901, 2, "u32", 0.01),  # ExtFrq; 30803 is InvFrq
+    # ExtCur is S32 FIX3 (signed import/export). Do not apply pack ±charge flip.
+    ("webbox_grid_current", 3, 30909, 2, "s32", 0.001),  # ExtCur L1
+    ("webbox_grid_current_l2", 3, 30911, 2, "s32", 0.001),  # ExtCurSlv1
+    # 30803 InvFrq kept as a fallback when ExtFrq is NaN (see derived).
+    ("webbox_inverter_frequency", 3, 30803, 2, "u32", 0.01),
     # 30805 / 30813 are Sunny Boy. On SI6048 they are missing or a constant
     # (live plant: reactive stuck at −700 var, apparent blank). Do not poll.
     ("webbox_status_code", 3, 30201, 2, "s32", 1.0),
@@ -413,6 +423,19 @@ def apply_si_modbus_derived(out: dict[str, Any]) -> dict[str, Any]:
             out["webbox_apparent_power"] = round((pf * pf + qf * qf) ** 0.5)
         elif pf is not None:
             out["webbox_apparent_power"] = round(abs(pf))
+
+    # External mains (30903/30901) can be NaN when islanded; keep Grid V/Hz
+    # tiles alive from InvVtg / InvFrq (30783 / 30803).
+    if out.get("webbox_grid_voltage") is None and out.get("webbox_inverter_voltage") is not None:
+        out["webbox_grid_voltage"] = out["webbox_inverter_voltage"]
+    if out.get("webbox_grid_voltage_l2") is None and out.get(
+        "webbox_inverter_voltage_l2"
+    ) is not None:
+        out["webbox_grid_voltage_l2"] = out["webbox_inverter_voltage_l2"]
+    if out.get("webbox_grid_frequency") is None and out.get(
+        "webbox_inverter_frequency"
+    ) is not None:
+        out["webbox_grid_frequency"] = out["webbox_inverter_frequency"]
     return out
 
 

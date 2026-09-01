@@ -200,3 +200,50 @@ def test_apply_si_modbus_derived_relay_apparent_clears_reactive():
     # Stale Sunny Boy Q must not survive a poll that no longer reads 30805.
     stale = mb.apply_si_modbus_derived({})
     assert stale["webbox_reactive_power"] is None
+
+
+def test_30783_kept_and_30903_is_external_grid_voltage():
+    """30783 stays InvVtg; Grid V tile is ExtVtg 30903 (WEBBOX-MODBUS-TB-EN-19)."""
+    inv = _reg("webbox_inverter_voltage")
+    assert inv[2] == 30783
+    assert inv[4] == "u32"
+    assert inv[5] == 0.01
+    assert abs(mb._decode_regs([0, 12098], "u32", 0.01) - 120.98) < 1e-9
+
+    ext = _reg("webbox_grid_voltage")
+    assert ext[2] == 30903
+    assert ext[4] == "u32"
+    assert ext[5] == 0.01
+    assert abs(mb._decode_regs([0, 12098], "u32", 0.01) - 120.98) < 1e-9
+
+    assert _reg("webbox_grid_voltage_l2")[2] == 30905
+    assert _reg("webbox_inverter_voltage_l2")[2] == 30785
+
+
+def test_30909_extcur_signed_not_pack_flipped():
+    """ExtCur S32 FIX3 — SMA signed import/export, not pack −discharge/+charge."""
+    key, _u, addr, _c, dtype, scale = _reg("webbox_grid_current")
+    assert addr == 30909
+    assert dtype == "s32"
+    assert scale == 0.001
+    assert scale > 0  # must not use the 30843 pack flip
+    import_a = mb._decode_regs([0, 18500], dtype, scale)
+    assert abs(import_a - 18.5) < 1e-9
+    raw_neg = (-12300) & 0xFFFFFFFF
+    export_a = mb._decode_regs(
+        [(raw_neg >> 16) & 0xFFFF, raw_neg & 0xFFFF], dtype, scale
+    )
+    assert abs(export_a - (-12.3)) < 1e-9
+    assert _reg("webbox_grid_current_l2")[2] == 30911
+    assert _reg("webbox_grid_current_l2")[5] == 0.001
+    addrs = {row[2] for row in mb.WEBBOX_MODBUS_REGISTERS}
+    assert 30795 not in addrs  # TotInvCur — inverter, not external grid
+
+
+def test_ext_voltage_falls_back_to_30783_when_islanded():
+    out = mb.apply_si_modbus_derived({"webbox_inverter_voltage": 120.98})
+    assert out["webbox_grid_voltage"] == 120.98
+    kept = mb.apply_si_modbus_derived(
+        {"webbox_grid_voltage": 121.4, "webbox_inverter_voltage": 120.98}
+    )
+    assert kept["webbox_grid_voltage"] == 121.4

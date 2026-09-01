@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.18
+
+- **Feature:** plant UI **Grid V / Grid A** from SI external mains
+  (`WEBBOX-MODBUS-TB-EN-19`): `30903`/`30905` ExtVtg L1/L2, `30909`/`30911`
+  ExtCur L1/L2 (S32 FIX3, SMA signed import/export — not pack current).
+  2Phase2 cluster exposes L1 and L2. `30783` InvVtg is still polled
+  (fallback when ExtVtg is NaN). Grid start remains RPC `GdManStr`.
+- Integration **1.9.17**
+
 ## 2.2.17
 
 - **Fix:** SI Modbus map now matches SI-Modbus-BA-en-12 on this 12S ~42 V

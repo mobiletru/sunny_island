@@ -89,6 +89,12 @@ SENSOR_TYPES = {
     "webbox_total_yield": "kWh",
     "webbox_device_power": "W",
     "webbox_grid_voltage": "V",
+    "webbox_grid_voltage_l2": "V",
+    "webbox_grid_current": "A",
+    "webbox_grid_current_l2": "A",
+    "webbox_inverter_voltage": "V",
+    "webbox_inverter_voltage_l2": "V",
+    "webbox_inverter_frequency": "Hz",
     "webbox_grid_frequency": "Hz",
     "webbox_reactive_power": "var",
     "webbox_apparent_power": "VA",
@@ -232,6 +238,12 @@ ICON_MAP = {
     "webbox_total_yield": "mdi:chart-areaspline",
     "webbox_device_power": "mdi:solar-power-variant",
     "webbox_grid_voltage": "mdi:sine-wave",
+    "webbox_grid_voltage_l2": "mdi:sine-wave",
+    "webbox_grid_current": "mdi:current-ac",
+    "webbox_grid_current_l2": "mdi:current-ac",
+    "webbox_inverter_voltage": "mdi:sine-wave",
+    "webbox_inverter_voltage_l2": "mdi:sine-wave",
+    "webbox_inverter_frequency": "mdi:sine-wave",
     "webbox_grid_frequency": "mdi:sine-wave",
     "webbox_reactive_power": "mdi:flash-outline",
     "webbox_apparent_power": "mdi:flash-triangle-outline",
@@ -327,6 +339,9 @@ _VOLTAGE_KEYS = frozenset(
     {
         "volts",
         "webbox_grid_voltage",
+        "webbox_grid_voltage_l2",
+        "webbox_inverter_voltage",
+        "webbox_inverter_voltage_l2",
         "webbox_battery_voltage",
         "webbox_charge_voltage",
         "webbox_charge_voltage_full",
@@ -367,6 +382,7 @@ _APPARENT_POWER_KEYS = frozenset({"webbox_apparent_power"})
 _FREQUENCY_KEYS = frozenset(
     {
         "webbox_grid_frequency",
+        "webbox_inverter_frequency",
         "webbox_inverter_frequency_nom",
         "webbox_grid_frequency_nom",
         "webbox_grid_frequency_min",
@@ -378,7 +394,15 @@ _COUNTDOWN_KEYS = frozenset(
     {"webbox_grid_connection_time", "webbox_power_setpoint_timeout"}
 )
 _BATTERY_KEYS = frozenset({"state_of_charge", "webbox_battery_soc"})
-_CURRENT_KEYS = frozenset({"current", "tcch_amps", "webbox_battery_current"})
+_CURRENT_KEYS = frozenset(
+    {
+        "current",
+        "tcch_amps",
+        "webbox_battery_current",
+        "webbox_grid_current",
+        "webbox_grid_current_l2",
+    }
+)
 _TEMP_KEYS = frozenset({"lowest_temp", "highest_temp", "webbox_battery_temp"})
 _PERCENT_SI_KEYS = frozenset(
     {
@@ -541,7 +565,11 @@ def sensor_display_precision(key: str) -> int | None:
         "high_voltage_cutoff",
         "low_voltage_cutoff",
         "webbox_grid_voltage",
+        "webbox_grid_voltage_l2",
+        "webbox_inverter_voltage",
+        "webbox_inverter_voltage_l2",
         "webbox_grid_frequency",
+        "webbox_inverter_frequency",
         "webbox_battery_voltage",
     ):
         return 2
