@@ -22,7 +22,7 @@ configuration:
     description: Home Assistant entity prefix for Enphase Envoy sensors.
   ha_token:
     name: Home Assistant token
-    description: Optional long-lived access token injected into the plant UI on first load.
+    description: Unused. Ingress uses the Supervisor token. Left so older option schemas still load.
   log_level:
     name: Log level
     description: App log verbosity.
