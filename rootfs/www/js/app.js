@@ -47,22 +47,21 @@
   }
 
   function bindAuth() {
-    $('#connect-btn').addEventListener('click', () => {
-      const token = $('#token-input').value.trim();
-      if (!token) return;
-      storeToken(token);
-      hideAuth();
-      tryConnect();
-    });
-    $('#token-input').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') $('#connect-btn').click();
-    });
-    $('#disconnect-btn').addEventListener('click', () => {
-      client?.disconnect();
-      clearToken();
-      showAuth();
-      setConnectionStatus('disconnected');
-    });
+    const connectBtn = $('#connect-btn');
+    if (connectBtn) {
+      connectBtn.addEventListener('click', () => {
+        hideAuth();
+        tryConnect();
+      });
+    }
+    const disc = $('#disconnect-btn');
+    if (disc) {
+      disc.addEventListener('click', () => {
+        if (client) client.disconnect();
+        setConnectionStatus('disconnected');
+        tryConnect();
+      });
+    }
   }
 
   function bindSettings() {
@@ -598,20 +597,15 @@
   }
 
   function tryConnect() {
-    const token = getStoredToken();
-    if (!token) {
-      showAuth();
-      return;
-    }
     hideAuth();
-    connectHA(token);
+    connectHA();
   }
 
-  function connectHA(token) {
+  function connectHA() {
     client?.disconnect();
     client = new HAClient({
       url: detectHAUrl(),
-      token,
+      token: '',
       onConnect: async () => {
         setConnectionStatus('connected');
         try {
@@ -627,10 +621,6 @@
         recordHistory();
       },
       onError: (msg) => {
-        if (String(msg).toLowerCase().includes('token')) {
-          clearToken();
-          showAuth();
-        }
         setConnectionStatus('error', msg);
       },
     });
