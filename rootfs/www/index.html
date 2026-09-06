@@ -15,14 +15,11 @@
   <link rel="stylesheet" href="css/overview.css" />
 </head>
 <body>
-  <div id="auth-overlay" class="auth-overlay hidden">
+  <div id="auth-overlay" class="auth-overlay hidden" hidden>
     <div class="auth-card">
       <div class="auth-brand">SI</div>
       <h2>Sunny Island</h2>
-      <p>Long-lived access token for live pack + solar + Tessie data.</p>
-      <input id="token-input" type="password" placeholder="eyJhbGciOiJIUzI1NiIs..." autocomplete="off" />
-      <button id="connect-btn" class="btn-primary">Connect</button>
-      <p class="auth-hint">Profile → Security → Long-Lived Access Tokens</p>
+      <p>Connecting through Home Assistant Ingress — no token needed.</p>
     </div>
   </div>
 
@@ -258,8 +255,8 @@
     </footer>
   </div>
 
-  <script src="js/config.js"></script>
-  <script src="js/ha-client.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/config.js?v=2.2.17"></script>
+  <script src="js/ha-client.js?v=2.2.17"></script>
+  <script src="js/app.js?v=2.2.17"></script>
 </body>
 </html>
