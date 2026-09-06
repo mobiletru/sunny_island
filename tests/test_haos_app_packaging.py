@@ -20,8 +20,9 @@ def test_repository_yaml_identifies_app_store_repo():
 
 def test_config_yaml_required_app_keys():
     text = _read("config.yaml")
+    app_ver = (ROOT / "APP_VERSION").read_text(encoding="utf-8").strip()
     assert 'name: Sunny Island' in text
-    assert 'version: "2.2.16"' in text
+    assert f'version: "{app_ver}"' in text
     assert "auto_setup_bms: true" in text
     assert "bms_udp_port: 6550" in text
     assert "slug: sunny_island" in text
@@ -48,7 +49,8 @@ def test_dockerfile_uses_official_multiarch_base_and_app_label():
     text = _read("Dockerfile")
     assert "ghcr.io/home-assistant/base:3.21" in text
     assert 'io.hass.type="app"' in text
-    assert "BUILD_VERSION=2.2.16" in text
+    app_ver = (ROOT / "APP_VERSION").read_text(encoding="utf-8").strip()
+    assert f"BUILD_VERSION={app_ver}" in text
     assert "COPY scripts/bms_setup.py" in text
 
 
@@ -117,7 +119,7 @@ def test_translations_cover_bms_schema_keys():
 def test_app_version_file_matches_config_and_dockerfile():
     """APP_VERSION is the app version (not tesla_evtv_bms manifest)."""
     app_ver = (ROOT / "APP_VERSION").read_text(encoding="utf-8").strip()
-    assert app_ver == "2.2.16"
+    assert app_ver == "2.2.17"
     assert f'version: "{app_ver}"' in _read("config.yaml")
     assert f"BUILD_VERSION={app_ver}" in _read("Dockerfile")
     manifest = (ROOT / "custom_components" / "tesla_evtv_bms" / "manifest.json").read_text(

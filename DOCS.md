@@ -24,10 +24,10 @@ Status is written to `/data/status.json`.
 
 ## Plant UI connection
 
-WebSocket to HA (`/api/websocket`) using either:
-
-1. A long-lived access token entered in the app, or  
-2. The optional `ha_token` app option (injected on first load)
+Ingress `/ha-ws` proxies Home Assistant's WebSocket with `SUPERVISOR_TOKEN`
+(`homeassistant_api: true`). The sidebar app does not ask for a long-lived
+token. `ha_token` remains in the options schema so older installs still load;
+it is unused.
 
 ## Entities
 
