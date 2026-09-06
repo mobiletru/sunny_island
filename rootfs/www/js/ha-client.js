@@ -104,7 +104,9 @@
       this.ws = new WebSocket(this.url);
 
       this.ws.onopen = () => {
-        this._send({ type: 'auth', access_token: this.token });
+        if (this.token) {
+          this._send({ type: 'auth', access_token: this.token });
+        }
       };
 
       this.ws.onmessage = (event) => {
@@ -215,9 +217,15 @@
   }
 
   function detectHAUrl() {
-    const { protocol, host } = global.location;
-    const wsProto = protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${wsProto}//${host}/api/websocket`;
+    try {
+      const u = new URL('ha-ws', global.document.baseURI || global.location.href);
+      u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+      return u.toString();
+    } catch (e) {
+      const { protocol, host } = global.location;
+      const wsProto = protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${wsProto}//${host}/ha-ws`;
+    }
   }
 
   const HA_TOKEN_KEY = 'sunny_island_ha_token';
